@@ -3,13 +3,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-from django.contrib.auth import authenticate, update_session_auth_hash
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
-from django.core.mail import send_mail
-from django.conf import settings
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from .models import User, UserWatchHistory, UserFavorite
 from .serializers import (
@@ -20,6 +18,15 @@ from .serializers import (
     ChangePasswordSerializer,
     UserWatchHistorySerializer,
     UserFavoriteSerializer
+)
+from .utils import (
+    authenticate_user,
+    generate_jwt_tokens,
+    set_auth_cookies,
+    generate_activation_token,
+    send_activation_email,
+    send_password_reset_email,
+    get_user_by_email
 )
 
 
@@ -67,19 +74,8 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Versuche User mit E-Mail zu finden
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response(
-                {'error': 'Invalid credentials'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-        
-        # Authentifiziere mit Username (da Django authenticate username erwartet)
-        user = authenticate(username=user.username, password=password)
-        
-        if user is None:
+        user = authenticate_user(email, password)
+        if not user:
             return Response(
                 {'error': 'Invalid credentials'},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -91,44 +87,18 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Generiere JWT Tokens
-        refresh = RefreshToken.for_user(user)
-        access_token = str(refresh.access_token)
-        refresh_token = str(refresh)
-        
-        # Erstelle Response
-        response_data = {
-            "detail": "Login successful",
-            "user": {
-                "id": user.id,
-                "username": user.email  # Verwende E-Mail als Username im Response
-            }
-        }
-        
-        response = Response(response_data, status=status.HTTP_200_OK)
-        
-        # Setze HttpOnly Cookies
-        # Access Token Cookie
-        response.set_cookie(
-            key='access_token',
-            value=access_token,
-            httponly=True,
-            secure=False,  # True in Production mit HTTPS
-            samesite='Lax',
-            max_age=3600  # 1 Stunde
-        )
-        
-        # Refresh Token Cookie
-        response.set_cookie(
-            key='refresh_token',
-            value=refresh_token,
-            httponly=True,
-            secure=False,  # True in Production mit HTTPS
-            samesite='Lax',
-            max_age=604800  # 7 Tage
-        )
-        
+        tokens = generate_jwt_tokens(user)
+        response = self._create_login_response(user)
+        set_auth_cookies(response, tokens['access'], tokens['refresh'])
         return response
+    
+    def _create_login_response(self, user):
+        """Create successful login response"""
+        data = {
+            "detail": "Login successful",
+            "user": {"id": user.id, "username": user.email}
+        }
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class RefreshTokenView(APIView):
