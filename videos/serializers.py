@@ -179,12 +179,39 @@ class VideoRatingSerializer(serializers.ModelSerializer):
 
 
 class VideoStreamSerializer(serializers.ModelSerializer):
-    """Serializer für Video-Streaming (nur Video-URLs)"""
+    """Serializer for video playback with HLS stream URLs"""
     
+    available_qualities = serializers.SerializerMethodField()
+    hls_streams = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Video
         fields = [
-            'id', 'title', 'video_360p', 'video_480p',
-            'video_720p', 'video_1080p', 'duration'
+            'id', 'title', 'description', 'thumbnail_url',
+            'duration', 'formatted_duration',
+            'available_qualities', 'hls_streams'
         ]
-        read_only_fields = fields
+
+    def get_available_qualities(self, obj):
+        """Returns list of available quality options"""
+        return ['360p', '480p', '720p', '1080p']
+    
+    def get_hls_streams(self, obj):
+        """Returns HLS M3U8 URLs for all qualities"""
+        request = self.context.get('request')
+        base_url = request.build_absolute_uri('/') if request else 'http://localhost:8000/'
+        
+        return {
+            '360p': f'{base_url}api/video/{obj.id}/360p/index.m3u8',
+            '480p': f'{base_url}api/video/{obj.id}/480p/index.m3u8',
+            '720p': f'{base_url}api/video/{obj.id}/720p/index.m3u8',
+            '1080p': f'{base_url}api/video/{obj.id}/1080p/index.m3u8',
+        }
+    
+    def get_thumbnail_url(self, obj):
+        """Returns full thumbnail URL"""
+        if obj.thumbnail:
+            request = self.context.get('request')
+            return request.build_absolute_uri(obj.thumbnail.url) if request else obj.thumbnail.url
+        return None
