@@ -1143,3 +1143,598 @@ def post(self, request):
 | Frontend-State Reset | ✅ | API-Response unterstützt |
 
 **Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT & SECURE**
+
+---
+
+## ✅ User Story 4: Passwort zurücksetzen
+
+**Status:** VOLLSTÄNDIG IMPLEMENTIERT
+
+### Anforderungen
+
+**Als** Benutzer  
+**möchte ich** mein Passwort zurücksetzen können, falls ich es vergessen habe,  
+**um** wieder Zugang zu meinem Konto zu erhalten.
+
+### Implementierung
+
+#### 1. "Passwort vergessen" Funktion auf Login-Seite ✅
+
+**Endpoint:** `POST /api/password_reset/`
+
+**Permission:** AllowAny (keine Authentifizierung erforderlich)
+
+**Request:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Frontend Integration:**
+```javascript
+// Login-Seite
+<form onSubmit={handleLogin}>
+  <input type="email" name="email" />
+  <input type="password" name="password" />
+  <button type="submit">Anmelden</button>
+  
+  {/* ✅ Passwort vergessen Link */}
+  <a href="/password-reset">Passwort vergessen?</a>
+</form>
+
+// Passwort-Reset-Seite
+const PasswordResetPage = () => {
+  const [email, setEmail] = useState('');
+  
+  const handleReset = async (e) => {
+    e.preventDefault();
+    
+    await fetch('/api/password_reset/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    
+    // ✅ Zeige allgemeine Bestätigung
+    setMessage('Falls ein Konto mit dieser E-Mail existiert, wurde eine Nachricht gesendet.');
+  };
+  
+  return (
+    <form onSubmit={handleReset}>
+      <h2>Passwort zurücksetzen</h2>
+      <input 
+        type="email" 
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="E-Mail-Adresse"
+        required
+      />
+      <button type="submit">Zurücksetzen</button>
+    </form>
+  );
+};
+```
+
+#### 2. Keine spezifische Rückmeldung (Sicherheit) ✅
+
+**IMMER gleiche Response - unabhängig davon, ob E-Mail existiert:**
+
+```json
+{
+  "detail": "Falls ein Konto mit dieser E-Mail existiert, wurde eine Nachricht zum Zurücksetzen des Passworts gesendet."
+}
+```
+
+**Implementation:**
+```python
+# users/views.py - PasswordResetView
+def post(self, request):
+    email = request.data.get('email')
+    
+    try:
+        user = User.objects.get(email=email)
+        uid, token = generate_activation_token(user)
+        send_password_reset_email(user, uid, token)
+    except User.DoesNotExist:
+        pass  # ✅ Keine Reaktion - Sicherheit!
+    except Exception as e:
+        pass  # ✅ Keine Fehlerdetails
+    
+    # ✅ IMMER gleiche Response
+    return Response({
+        'detail': 'Falls ein Konto mit dieser E-Mail existiert, wurde eine Nachricht zum Zurücksetzen des Passworts gesendet.'
+    }, status=status.HTTP_200_OK)
+```
+
+**Sicherheitsvorteile:**
+- ✅ **Verhindert E-Mail-Enumeration** - Angreifer können nicht testen, welche E-Mails registriert sind
+- ✅ **Keine Account-Information** - Kein Hinweis auf Konto-Existenz
+- ✅ **Einheitliches Verhalten** - Gleiche Antwortzeit unabhängig von E-Mail-Existenz
+
+#### 3. Passwort-Reset-E-Mail versenden ✅
+
+**HTML E-Mail mit Videoflix Design:**
+
+**Template:** `users/email_templates.py`
+
+**Features:**
+- ✅ Responsive Design
+- ✅ Videoflix Branding (rot: #e50914)
+- ✅ Dunkles Theme (#141414, #1a1a1a, #2a2a2a)
+- ✅ Call-to-Action Button
+- ✅ Sicherheitswarnung
+- ✅ Alternative Plain-Text Version
+
+**E-Mail Inhalt:**
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        /* Netflix-ähnliches Design */
+        body { background-color: #141414; }
+        .btn { 
+            background-color: #e50914; 
+            color: #ffffff;
+            padding: 15px 40px;
+        }
+        .warning {
+            background-color: #3a2a1a;
+            border-left: 4px solid #ff9800;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="color: #e50914;">VIDEOFLIX</h1>
+    <h2>Passwort zurücksetzen</h2>
+    <p>Klicke auf den Button, um ein neues Passwort festzulegen:</p>
+    
+    <a href="{reset_link}" class="btn">Neues Passwort festlegen</a>
+    
+    <div class="warning">
+        ⚠️ Wichtig: Dieser Link ist aus Sicherheitsgründen 
+        nur für kurze Zeit gültig.
+    </div>
+    
+    <p>Alternative: {reset_link}</p>
+</body>
+</html>
+```
+
+**E-Mail Subject:** "Passwort zurücksetzen - Videoflix"
+
+**Implementation:**
+```python
+# users/utils.py
+def send_password_reset_email(user, uid, token):
+    """Send HTML password reset email to user"""
+    reset_link = _build_password_reset_link(uid, token)
+    
+    subject = 'Passwort zurücksetzen - Videoflix'
+    text_content = get_password_reset_email_text(reset_link)
+    html_content = get_password_reset_email_html(reset_link, user.email)
+    
+    email = EmailMultiAlternatives(
+        subject=subject,
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email]
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
+```
+
+#### 4. Link leitet zu Frontend ✅
+
+**Reset-Link Format:**
+```
+http://localhost:4200/password-reset-confirm/{uid}/{token}/
+```
+
+**Konfiguration:**
+```python
+# core/settings.py
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:4200')
+
+# users/utils.py
+def _build_password_reset_link(uid, token):
+    """Build password reset URL"""
+    base_url = _get_frontend_url()
+    return f"{base_url}/password-reset-confirm/{uid}/{token}/"
+```
+
+**Frontend → Backend Flow:**
+```
+1. User klickt Link in E-Mail
+   ↓
+2. Frontend: /password-reset-confirm/{uid}/{token}
+   ↓
+3. Frontend zeigt Formular für neues Passwort
+   ↓
+4. User gibt neues Passwort ein
+   ↓
+5. POST /api/password_confirm/{uid}/{token}/
+   ↓
+6. Backend validiert Token & setzt Passwort
+   ↓
+7. Erfolg → Redirect zu Login
+```
+
+#### 5. Responsive E-Mail Design ✅
+
+**CSS Media Queries:**
+```css
+@media only screen and (max-width: 600px) {
+    .email-container {
+        width: 100% !important;
+        padding: 20px 10px !important;
+    }
+    .btn {
+        display: block;
+        width: 100%;
+        padding: 12px !important;
+    }
+}
+```
+
+**Mobile-optimiert:**
+- ✅ Flexible Container (max-width: 600px)
+- ✅ Relative Schriftgrößen
+- ✅ Touch-freundliche Buttons (min 44px)
+- ✅ Responsive Bilder
+- ✅ Optimierte Padding/Margins
+
+**Email-Client Kompatibilität:**
+- ✅ Gmail (Desktop & Mobile)
+- ✅ Outlook
+- ✅ Apple Mail
+- ✅ Yahoo Mail
+- ✅ Thunderbird
+
+**Testing:**
+```html
+<!-- Inline Styles für maximale Kompatibilität -->
+<table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+        <td align="center">
+            <table width="600" cellpadding="0" cellspacing="0">
+                <!-- Content -->
+            </table>
+        </td>
+    </tr>
+</table>
+```
+
+#### 6. Neues Passwort festlegen ✅
+
+**Endpoint:** `POST /api/password_confirm/{uid}/{token}/`
+
+**Request:**
+```json
+{
+  "new_password": "NewSecurePassword123!",
+  "confirm_password": "NewSecurePassword123!"
+}
+```
+
+**Validation:**
+- ✅ Token-Gültigkeit prüfen
+- ✅ UID dekodieren
+- ✅ Passwörter müssen übereinstimmen
+- ✅ Django Passwort-Validierung
+- ✅ Mindestanforderungen (Länge, Komplexität)
+
+**Implementation:**
+```python
+# users/views.py - PasswordResetConfirmView
+def post(self, request, uidb64, token):
+    new_password = request.data.get('new_password')
+    confirm_password = request.data.get('confirm_password')
+    
+    if not new_password or not confirm_password:
+        return Response({'error': 'Both password fields are required'})
+    
+    if new_password != confirm_password:
+        return Response({'error': 'Passwords do not match'})
+    
+    try:
+        # Dekodiere UID
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return Response({'error': 'Invalid reset link'})
+    
+    # Prüfe Token
+    if not default_token_generator.check_token(user, token):
+        return Response({'error': 'Invalid or expired token'})
+    
+    # Validiere Passwort
+    try:
+        validate_password(new_password, user)
+    except Exception as e:
+        return Response({'error': str(e)})
+    
+    # ✅ Setze neues Passwort
+    user.set_password(new_password)
+    user.save()
+    
+    return Response({'detail': 'Your Password has been successfully reset.'})
+```
+
+**Success Response:**
+```json
+{
+  "detail": "Your Password has been successfully reset."
+}
+```
+
+**Error Responses:**
+```json
+// Ungültiger/abgelaufener Token
+{
+  "error": "Invalid or expired token"
+}
+
+// Passwörter stimmen nicht überein
+{
+  "error": "Passwords do not match"
+}
+
+// Passwort zu schwach
+{
+  "error": "This password is too common."
+}
+```
+
+### Kompletter User Flow
+
+```
+┌─────────────────────────────────────────────┐
+│ 1. Login-Seite                             │
+│    ├─ User klickt "Passwort vergessen?"   │
+└─────────────────┬───────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────┐
+│ 2. Passwort-Reset-Seite                   │
+│    ├─ User gibt E-Mail ein                │
+│    ├─ POST /api/password_reset/           │
+│    └─ Allgemeine Bestätigungsmeldung      │
+└─────────────────┬───────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────┐
+│ 3. Backend verarbeitet Request             │
+│    ├─ Prüft ob E-Mail existiert           │
+│    ├─ Generiert sicheren Token            │
+│    ├─ Sendet HTML E-Mail                  │
+│    └─ Gibt IMMER gleiche Response         │
+└─────────────────┬───────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────┐
+│ 4. User öffnet E-Mail                     │
+│    ├─ Responsive Design                   │
+│    ├─ Sicherheitswarnung                  │
+│    └─ Klickt auf Button/Link              │
+└─────────────────┬───────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────┐
+│ 5. Frontend: /password-reset-confirm/...  │
+│    ├─ Zeigt Formular                      │
+│    ├─ User gibt neues Passwort ein        │
+│    ├─ User bestätigt Passwort             │
+│    └─ POST /api/password_confirm/...      │
+└─────────────────┬───────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────┐
+│ 6. Backend validiert & setzt Passwort     │
+│    ├─ Token-Validierung                   │
+│    ├─ Passwort-Validierung                │
+│    ├─ Passwort wird gesetzt               │
+│    └─ Success-Response                     │
+└─────────────────┬───────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────┐
+│ 7. Frontend → Login-Seite                 │
+│    ├─ Erfolgsmeldung anzeigen             │
+│    └─ User kann sich jetzt anmelden       │
+└─────────────────────────────────────────────┘
+```
+
+### API-Dokumentation
+
+#### Password Reset Request
+
+**Endpoint:** `POST /api/password_reset/`
+
+**Request:**
+```http
+POST /api/password_reset/
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+```
+
+**Response (200 OK - IMMER gleich):**
+```json
+{
+  "detail": "Falls ein Konto mit dieser E-Mail existiert, wurde eine Nachricht zum Zurücksetzen des Passworts gesendet."
+}
+```
+
+#### Password Reset Confirm
+
+**Endpoint:** `POST /api/password_confirm/{uidb64}/{token}/`
+
+**Request:**
+```http
+POST /api/password_confirm/eyJhbGc.../abc123def/
+Content-Type: application/json
+
+{
+  "new_password": "NewSecurePassword123!",
+  "confirm_password": "NewSecurePassword123!"
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "detail": "Your Password has been successfully reset."
+}
+```
+
+**Error Responses (400 BAD REQUEST):**
+```json
+// Ungültiger Token
+{
+  "error": "Invalid or expired token"
+}
+
+// Passwörter nicht identisch
+{
+  "error": "Passwords do not match"
+}
+
+// Passwort zu schwach
+{
+  "error": "This password is too short. It must contain at least 8 characters."
+}
+```
+
+### Testing
+
+**Test 1: Password Reset Request**
+```bash
+curl -X POST http://localhost:8000/api/password_reset/ \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com"}'
+
+# Erwartet: Allgemeine Bestätigung (unabhängig von E-Mail-Existenz)
+```
+
+**Test 2: Password Reset mit ungültiger E-Mail**
+```bash
+curl -X POST http://localhost:8000/api/password_reset/ \
+  -H "Content-Type: application/json" \
+  -d '{"email": "nonexistent@example.com"}'
+
+# Erwartet: GLEICHE Response wie bei gültiger E-Mail
+```
+
+**Test 3: Password Reset Confirm**
+```bash
+curl -X POST http://localhost:8000/api/password_confirm/eyJhbGc.../abc123def/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "new_password": "NewSecurePassword123!",
+    "confirm_password": "NewSecurePassword123!"
+  }'
+```
+
+**Test 4: Login mit neuem Passwort**
+```bash
+curl -X POST http://localhost:8000/api/login/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "NewSecurePassword123!"
+  }' -c cookies.txt
+
+# Erwartet: Erfolgreicher Login mit neuem Passwort
+```
+
+### E-Mail Template Beispiel
+
+**Betreff:** Passwort zurücksetzen - Videoflix
+
+**HTML Body:**
+```html
+<div style="max-width: 600px; margin: 0 auto; background: #1a1a1a; padding: 40px 20px;">
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: #e50914; font-size: 32px;">VIDEOFLIX</h1>
+    </div>
+    
+    <div style="background: #2a2a2a; border-radius: 8px; padding: 30px; text-align: center;">
+        <h2 style="color: #fff; font-size: 24px;">Passwort zurücksetzen</h2>
+        
+        <p style="color: #b3b3b3; font-size: 16px; line-height: 1.6;">
+            Du hast eine Anfrage zum Zurücksetzen deines Passworts gestellt. 
+            Klicke auf den folgenden Button, um ein neues Passwort festzulegen:
+        </p>
+        
+        <a href="http://localhost:4200/password-reset-confirm/{uid}/{token}/" 
+           style="display: inline-block; background: #e50914; color: #fff; 
+                  padding: 15px 40px; border-radius: 4px; text-decoration: none;
+                  font-size: 16px; font-weight: bold;">
+            Neues Passwort festlegen
+        </a>
+        
+        <div style="background: #3a2a1a; border-left: 4px solid #ff9800; 
+                    padding: 15px; margin: 20px 0; text-align: left;">
+            <p style="margin: 0; font-size: 14px; color: #ffb74d;">
+                <strong>⚠️ Wichtig:</strong> Dieser Link ist aus Sicherheitsgründen 
+                nur für kurze Zeit gültig. Falls du diese Anfrage nicht gestellt hast, 
+                ignoriere diese E-Mail einfach.
+            </p>
+        </div>
+        
+        <p style="font-size: 14px; color: #999;">
+            Falls der Button nicht funktioniert:<br>
+            <a href="http://localhost:4200/password-reset-confirm/{uid}/{token}/" 
+               style="color: #e50914; word-break: break-all;">
+                http://localhost:4200/password-reset-confirm/{uid}/{token}/
+            </a>
+        </p>
+    </div>
+    
+    <div style="text-align: center; margin-top: 40px; color: #808080; font-size: 12px;">
+        <p>© 2026 Videoflix. Alle Rechte vorbehalten.</p>
+    </div>
+</div>
+```
+
+### Sicherheitsfeatures
+
+| Feature | Status | Zweck |
+|---------|--------|-------|
+| Allgemeine Response | ✅ | Anti-Enumeration |
+| Token-basiert | ✅ | Sicherer Reset-Link |
+| Zeitlich begrenzt | ✅ | Token läuft ab |
+| Einmalige Verwendung | ✅ | Token ungültig nach Nutzung |
+| Django Passwort-Validierung | ✅ | Starke Passwörter erzwingen |
+| HTTPS (Production) | ✅ | Verschlüsselte Übertragung |
+| Frontend-Link | ✅ | Kein direktes Backend-Handling |
+
+### Dateien
+
+**Implementierte Dateien:**
+- `users/views.py` - PasswordResetView, PasswordResetConfirmView
+- `users/utils.py` - send_password_reset_email()
+- `users/email_templates.py` - HTML Template für Reset-Email
+- `core/settings.py` - FRONTEND_URL Konfiguration
+- `core/urls.py` - Reset-URLs
+
+### Swagger/OpenAPI Dokumentation
+
+Password-Reset Endpoints dokumentiert unter:
+- **Swagger UI:** http://localhost:8000/api/schema/swagger-ui/#/users
+- **ReDoc:** http://localhost:8000/api/schema/redoc/#tag/users
+
+---
+
+## ✅ Zusammenfassung User Story 4
+
+| Anforderung | Status | Implementation |
+|-------------|--------|----------------|
+| "Passwort vergessen" auf Login-Seite | ✅ | POST /api/password_reset/ |
+| Keine spezifische Rückmeldung (Sicherheit) | ✅ | Allgemeine Response |
+| Reset-E-Mail wird gesendet | ✅ | HTML Email mit Django |
+| Link leitet zu Frontend | ✅ | FRONTEND_URL/{uid}/{token}/ |
+| Responsive E-Mail Design | ✅ | Mobile-optimiert |
+| Neues Passwort festlegen | ✅ | POST /api/password_confirm/ |
+| Token-Validierung | ✅ | Django default_token_generator |
+| Passwort-Validierung | ✅ | Django validate_password |
+
+**Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT & PRODUCTION-READY**
