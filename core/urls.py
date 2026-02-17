@@ -48,6 +48,7 @@ urlpatterns = [
     
     # API Authentication & Registration
     path('api/login/', LoginView.as_view(), name='login'),
+    path('api/logout/', LogoutView.as_view(), name='logout'),
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/activate/<str:uidb64>/<str:token>/', ActivateAccountView.as_view(), name='activate'),
     path('api/token/refresh/', RefreshTokenView.as_view(), name='token_refresh_cookie'),
