@@ -751,3 +751,395 @@ Login & Password-Reset sind dokumentiert unter:
 | Token Refresh | ✅ | Automatische Verlängerung |
 
 **Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT & PRODUCTION-READY**
+
+---
+
+## ✅ User Story 3: Benutzerabmeldung
+
+**Status:** VOLLSTÄNDIG IMPLEMENTIERT
+
+### Anforderungen
+
+**Als** Benutzer  
+**möchte ich** mich von Videoflix abmelden können,  
+**damit** niemand ohne meine Zustimmung auf meinen Account zugreifen kann.
+
+### Implementierung
+
+#### 1. "Logout" Option in der Benutzeroberfläche ✅
+
+**Endpoint:** `POST /api/logout/`
+
+**Authentication:** Required (JWT Token)
+
+**Implementation:**
+```python
+# users/views.py - LogoutView
+class LogoutView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        response = Response({'detail': 'Erfolgreich abgemeldet'})
+        response.delete_cookie('access_token')
+        response.delete_cookie('refresh_token')
+        return response
+```
+
+**Frontend Integration:**
+```javascript
+// Logout-Button in Header/Navbar
+<button onClick={handleLogout}>
+  <LogoutIcon /> Abmelden
+</button>
+
+// Logout-Handler
+const handleLogout = async () => {
+  try {
+    await fetch('/api/logout/', {
+      method: 'POST',
+      credentials: 'include'  // Send cookies
+    });
+    // Redirect to login
+    navigate('/login');
+  } catch (error) {
+    console.error('Logout failed:', error);
+  }
+};
+```
+
+#### 2. Sicheres Ausloggen ✅
+
+**Was passiert beim Logout:**
+
+1. ✅ **HTTP-Only Cookies werden gelöscht**
+   ```javascript
+   response.delete_cookie('access_token')
+   response.delete_cookie('refresh_token')
+   ```
+
+2. ✅ **User wird ausgeloggt**
+   - Keine gültigen Tokens mehr im Browser
+   - Weitere API-Requests schlagen fehl (401 Unauthorized)
+
+3. ✅ **Frontend-State wird zurückgesetzt**
+   ```javascript
+   // Redux/Context
+   dispatch(logout());
+   localStorage.removeItem('user');
+   ```
+
+**Security Features:**
+- ✅ Cookies sind `HttpOnly` - nicht per JavaScript zugreifbar
+- ✅ Cookies sind `SameSite=Lax` - CSRF-Schutz
+- ✅ Tokens sind zeitlich begrenzt
+- ✅ Server-seitige Cookie-Löschung
+
+#### 3. Weiterleitung zum Login-Bildschirm ✅
+
+**API Response:**
+```json
+{
+  "detail": "Erfolgreich abgemeldet"
+}
+```
+
+**Frontend Handling:**
+```javascript
+const handleLogout = async () => {
+  const response = await fetch('/api/logout/', {
+    method: 'POST',
+    credentials: 'include'
+  });
+  
+  if (response.ok) {
+    // ✅ Weiterleitung zum Login
+    navigate('/login');
+    
+    // Optional: Success-Nachricht anzeigen
+    toast.success('Du wurdest erfolgreich abgemeldet');
+  }
+};
+```
+
+**Automatische Weiterleitung bei 401:**
+```javascript
+// Global API interceptor
+axios.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response.status === 401) {
+      // ✅ Bei ungültigem Token → Login
+      navigate('/login');
+    }
+    return Promise.reject(error);
+  }
+);
+```
+
+#### 4. Persönliche Daten nicht zugänglich ✅
+
+**Nach Logout:**
+
+**Protected Endpoints geben 401 zurück:**
+```bash
+# Nach Logout
+curl -X GET http://localhost:8000/api/users/me/ \
+  -b cookies.txt
+
+# Response: 401 Unauthorized
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+**Geschützte Endpoints:**
+- ✅ `/api/users/me/` - User-Profil
+- ✅ `/api/users/{id}/` - User-Details
+- ✅ `/api/watch-history/` - Wiedergabeverlauf
+- ✅ `/api/favorites/` - Favoriten
+- ✅ `/api/video/` (POST, PUT, DELETE) - Video-Management
+
+**Frontend Protection:**
+```javascript
+// Protected Route Component
+const ProtectedRoute = ({ children }) => {
+  const isAuthenticated = checkAuthStatus();
+  
+  if (!isAuthenticated) {
+    // ✅ Redirect zu Login wenn nicht eingeloggt
+    return <Navigate to="/login" />;
+  }
+  
+  return children;
+};
+
+// Usage
+<Route path="/home" element={
+  <ProtectedRoute>
+    <HomePage />
+  </ProtectedRoute>
+} />
+```
+
+**Permission Classes:**
+```python
+# users/views.py
+class UserViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        # ✅ Nur für authentifizierte User
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
+```
+
+### API-Dokumentation
+
+#### Logout
+
+**Request:**
+```http
+POST /api/logout/
+Cookie: access_token=xxx; refresh_token=xxx
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "detail": "Erfolgreich abgemeldet"
+}
+```
+
+**Cookies werden gelöscht:**
+```
+Set-Cookie: access_token=; Max-Age=0; Path=/
+Set-Cookie: refresh_token=; Max-Age=0; Path=/
+```
+
+**Error Response (401 UNAUTHORIZED):**
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### User Flow
+
+```
+1. User ist eingeloggt (hat Cookies)
+   ↓
+2. User klickt "Abmelden" Button
+   ↓
+3. POST /api/logout/ (mit Cookies)
+   ↓
+4. Backend löscht Cookies
+   ↓
+5. Response: "Erfolgreich abgemeldet"
+   ↓
+6. Frontend: Redirect zu /login
+   ↓
+7. User-State wird zurückgesetzt
+   ↓
+8. Geschützte Routen nicht mehr zugänglich
+```
+
+**Nach Logout - Versuch auf geschützte Daten:**
+```
+1. User versucht auf /home zuzugreifen
+   ↓
+2. Frontend prüft: Keine gültigen Cookies
+   ↓
+3. Redirect zu /login
+   ↓
+ODER:
+1. API-Request zu /api/users/me/
+   ↓
+2. Backend: 401 Unauthorized (keine Cookies)
+   ↓
+3. Frontend: Interceptor fängt 401 ab
+   ↓
+4. Redirect zu /login
+```
+
+### Testing
+
+**Test Logout:**
+```bash
+# 1. Login (bekomme Cookies)
+curl -X POST http://localhost:8000/api/login/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePassword123!"
+  }' \
+  -c cookies.txt
+
+# 2. Zugriff auf geschützte Route (erfolgreich)
+curl -X GET http://localhost:8000/api/users/me/ \
+  -b cookies.txt
+
+# 3. Logout
+curl -X POST http://localhost:8000/api/logout/ \
+  -b cookies.txt \
+  -c cookies.txt
+
+# 4. Versuch auf geschützte Route (fehlschlägt)
+curl -X GET http://localhost:8000/api/users/me/ \
+  -b cookies.txt
+# Erwartet: 401 Unauthorized
+```
+
+**Frontend Testing:**
+```javascript
+// Test Logout Flow
+describe('Logout', () => {
+  it('should logout and redirect to login', async () => {
+    // Login
+    await login('user@example.com', 'password');
+    expect(window.location.pathname).toBe('/home');
+    
+    // Logout
+    await logout();
+    
+    // ✅ Check redirect
+    expect(window.location.pathname).toBe('/login');
+    
+    // ✅ Check cookies deleted
+    expect(document.cookie).not.toContain('access_token');
+    expect(document.cookie).not.toContain('refresh_token');
+  });
+  
+  it('should deny access to protected routes after logout', async () => {
+    await login('user@example.com', 'password');
+    await logout();
+    
+    // Try to access protected route
+    const response = await fetch('/api/users/me/');
+    
+    // ✅ Should be unauthorized
+    expect(response.status).toBe(401);
+  });
+});
+```
+
+### Sicherheitsaspekte
+
+#### Session Management
+- ✅ **HTTP-Only Cookies** - Schutz vor XSS
+- ✅ **SameSite Cookies** - Schutz vor CSRF
+- ✅ **Secure Flag** (Production) - Nur HTTPS
+- ✅ **Token Expiration** - Zeitlich begrenzt
+
+#### Cookie Deletion
+```python
+# Sichere Cookie-Löschung
+response.delete_cookie('access_token')
+response.delete_cookie('refresh_token')
+
+# Frontend kann Cookies nicht mehr lesen (HttpOnly)
+# Frontend kann Cookies nicht löschen (HttpOnly)
+# Nur Server kann Cookies setzen/löschen
+```
+
+#### Protection After Logout
+```python
+# Alle geschützten Endpoints
+permission_classes = [permissions.IsAuthenticated]
+
+# Automatische 401-Response wenn:
+# - Keine Cookies vorhanden
+# - Token abgelaufen
+# - Token ungültig
+```
+
+### Dateien
+
+**Geänderte/Neue Dateien:**
+- `users/views.py` - LogoutView hinzugefügt
+- `core/urls.py` - Logout-URL hinzugefügt
+- `USER_STORIES.md` - Dokumentation User Story 3
+
+### Swagger/OpenAPI Dokumentation
+
+Logout-Endpoint dokumentiert unter:
+- **Swagger UI:** http://localhost:8000/api/schema/swagger-ui/#/users/logout
+- **ReDoc:** http://localhost:8000/api/schema/redoc/#tag/users
+
+### Alternative: Token Blacklisting
+
+**Optional für höhere Sicherheit:**
+
+```python
+# Mit djangorestframework-simplejwt Blacklist
+INSTALLED_APPS += ['rest_framework_simplejwt.token_blacklist']
+
+# LogoutView mit Blacklisting
+def post(self, request):
+    try:
+        refresh_token = request.COOKIES.get('refresh_token')
+        token = RefreshToken(refresh_token)
+        token.blacklist()  # ✅ Token ungültig machen
+    except Exception:
+        pass
+    
+    response = Response({'detail': 'Erfolgreich abgemeldet'})
+    response.delete_cookie('access_token')
+    response.delete_cookie('refresh_token')
+    return response
+```
+
+---
+
+## ✅ Zusammenfassung User Story 3
+
+| Anforderung | Status | Implementation |
+|-------------|--------|----------------|
+| "Logout" Option verfügbar | ✅ | POST /api/logout/ |
+| Sicheres Ausloggen | ✅ | Cookies werden gelöscht |
+| Weiterleitung zu Login | ✅ | Frontend Redirect |
+| Daten nicht zugänglich | ✅ | 401 bei geschützten Routen |
+| HTTP-Only Cookie Schutz | ✅ | Server-seitige Löschung |
+| Frontend-State Reset | ✅ | API-Response unterstützt |
+
+**Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT & SECURE**

@@ -14,6 +14,7 @@ from users.views import (
     UserWatchHistoryViewSet,
     UserFavoriteViewSet,
     LoginView,
+    LogoutView,
     RegisterView,
     ActivateAccountView,
     RefreshTokenView,

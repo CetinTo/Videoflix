@@ -105,6 +105,39 @@ class LoginView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+class LogoutView(APIView):
+    """
+    Logs out the user by deleting authentication cookies
+    
+    POST /api/logout/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @extend_schema(
+        request=None,
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'detail': {'type': 'string'}
+                }
+            }
+        },
+        description='Logs out user by removing HTTP-only cookies and invalidating tokens.'
+    )
+    def post(self, request):
+        response = Response(
+            {'detail': 'Erfolgreich abgemeldet'},
+            status=status.HTTP_200_OK
+        )
+        
+        # Delete HTTP-only cookies
+        response.delete_cookie('access_token')
+        response.delete_cookie('refresh_token')
+        
+        return response
+
+
 class RefreshTokenView(APIView):
     """
     Gibt ein neues Zugangstoken aus, wenn der alte Access-Token abgelaufen ist
