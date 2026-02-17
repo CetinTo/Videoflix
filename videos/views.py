@@ -302,6 +302,17 @@ class VideoViewSet(viewsets.ModelViewSet):
         return Response(result)
     
     @extend_schema(
+        description='Returns HLS stream URLs for video playback in all available qualities',
+        responses={200: VideoStreamSerializer}
+    )
+    @action(detail=True, methods=['get'], url_path='stream')
+    def stream(self, request, pk=None):
+        """Returns HLS streaming URLs for video player"""
+        video = self.get_object()
+        serializer = VideoStreamSerializer(video, context={'request': request})
+        return Response(serializer.data)
+    
+    @extend_schema(
         description='Gibt ähnliche Videos basierend auf Kategorien zurück'
     )
     @action(detail=True, methods=['get'])
