@@ -1738,3 +1738,90 @@ Password-Reset Endpoints dokumentiert unter:
 | Passwort-Validierung | ✅ | Django validate_password |
 
 **Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT & PRODUCTION-READY**
+
+---
+
+## ✅ User Story 5: Video-Dashboard
+
+**Status:** VOLLSTÄNDIG IMPLEMENTIERT
+
+### Anforderungen
+
+**Als** angemeldeter Benutzer  
+**möchte ich** eine Übersicht über verfügbare Videos sehen,  
+**um** interessante Inhalte zu entdecken und auszuwählen.
+
+### Implementierung
+
+#### 1. Hero-Bereich mit hervorgehobenem Video ✅
+
+**Endpoint:** `GET /api/video/hero/`
+
+**Features:**
+- ✅ Zeigt zufälliges Featured Video
+- ✅ Fallback: Video mit meisten Views
+- ✅ Thumbnail als Hintergrundbild
+- ✅ Vollständige Video-Details
+
+**Response:**
+```json
+{
+  "id": 1,
+  "title": "Breaking Bad - Season 1",
+  "description": "A high school chemistry teacher...",
+  "thumbnail": "http://localhost:8000/media/thumbnails/1/thumbnail.jpg",
+  "categories": [{"name": "Drama"}, {"name": "Thriller"}],
+  "duration": 2940,
+  "formatted_duration": "49:00",
+  "view_count": 15420,
+  "rating": 9.5,
+  "is_featured": true
+}
+```
+
+#### 2. Videos nach Genres gruppiert ✅
+
+**Endpoint:** `GET /api/video/by_category/`
+
+**Response:**
+```json
+[
+  {
+    "category": {"id": 1, "name": "Action", "slug": "action"},
+    "videos": [
+      {
+        "id": 12,
+        "title": "Mission Impossible",
+        "thumbnail_url": "http://localhost:8000/media/thumbnails/12/thumbnail.jpg",
+        "category": "Action"
+      }
+    ]
+  },
+  {
+    "category": {"id": 2, "name": "Drama"},
+    "videos": [...]
+  }
+]
+```
+
+#### 3. Sortierung nach Erstellungsdatum DESC ✅
+
+```python
+# videos/views.py
+ordering = ['-created_at']  # Neueste zuerst
+queryset.order_by('-created_at')
+```
+
+#### 4. Thumbnail und Titel ✅
+
+**VideoListSerializer:**
+```python
+fields = ['id', 'title', 'thumbnail_url', 'category']
+```
+
+**Automatische Thumbnail-Generierung:**
+- Screenshot bei Sekunde 5
+- FFmpeg automatisch
+- Gespeichert in media/thumbnails/
+
+**Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT**
