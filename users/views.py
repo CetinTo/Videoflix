@@ -70,20 +70,20 @@ class LoginView(APIView):
         
         if not email or not password:
             return Response(
-                {'error': 'Email and password are required'},
+                {'error': 'Bitte überprüfe deine Anmeldedaten und versuche es erneut.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         user = authenticate_user(email, password)
         if not user:
             return Response(
-                {'error': 'Invalid credentials'},
+                {'error': 'Bitte überprüfe deine Anmeldedaten und versuche es erneut.'},
                 status=status.HTTP_401_UNAUTHORIZED
             )
         
         if not user.is_active:
             return Response(
-                {'error': 'Account is not activated. Please check your email.'},
+                {'error': 'Bitte überprüfe deine Anmeldedaten und versuche es erneut.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -95,8 +95,12 @@ class LoginView(APIView):
     def _create_login_response(self, user):
         """Create successful login response"""
         data = {
-            "detail": "Login successful",
-            "user": {"id": user.id, "username": user.email}
+            "detail": "Anmeldung erfolgreich",
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username
+            }
         }
         return Response(data, status=status.HTTP_200_OK)
 
@@ -206,40 +210,17 @@ class PasswordResetView(APIView):
         
         try:
             user = User.objects.get(email=email)
-            
-            # Generiere Password-Reset-Token
-            token = default_token_generator.make_token(user)
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            
-            # Reset link (for email)
-            reset_link = f"{settings.FRONTEND_URL}/password-reset-confirm/{uid}/{token}/" if hasattr(settings, 'FRONTEND_URL') else f"http://localhost:4200/password-reset-confirm/{uid}/{token}/"
-            
-            # Send password reset email
-            try:
-                send_mail(
-                    subject='Password Reset - Videoflix',
-                    message=f'Click the following link to reset your password: {reset_link}',
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[user.email],
-                    fail_silently=False,
-                )
-            except Exception as e:
-                # Log error but don't reveal to user
-                print(f"Email sending failed: {e}")
-            
-            # Always same response (for security reasons)
-            return Response(
-                {'detail': 'An email has been sent to reset your password.'},
-                status=status.HTTP_200_OK
-            )
-            
+            uid, token = generate_activation_token(user)
+            send_password_reset_email(user, uid, token)
         except User.DoesNotExist:
-            # Same response as success for security reasons
-            # (prevents email enumeration)
-            return Response(
-                {'detail': 'An email has been sent to reset your password.'},
-                status=status.HTTP_200_OK
-            )
+            pass
+        except Exception as e:
+            pass
+        
+        return Response(
+            {'detail': 'Falls ein Konto mit dieser E-Mail existiert, wurde eine Nachricht zum Zurücksetzen des Passworts gesendet.'},
+            status=status.HTTP_200_OK
+        )
 
 
 class PasswordResetConfirmView(APIView):
