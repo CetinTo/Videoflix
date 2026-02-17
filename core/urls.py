@@ -29,6 +29,7 @@ from videos.views import (
     VideoHLSView,
     VideoSegmentView
 )
+from info.views import LegalPageViewSet
 
 
 # API Router
@@ -40,6 +41,7 @@ router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'video', VideoViewSet, basename='video')  # Singular: /api/video/
 router.register(r'comments', VideoCommentViewSet, basename='comment')
 router.register(r'ratings', VideoRatingViewSet, basename='rating')
+router.register(r'legal', LegalPageViewSet, basename='legal')
 
 
 urlpatterns = [
