@@ -226,14 +226,30 @@ class VideoViewSet(viewsets.ModelViewSet):
         serializer.save(uploaded_by=self.request.user)
     
     @extend_schema(
-        description='Gibt Featured Videos zurück (hervorgehobene Videos)'
+        description='Gibt Featured Videos zurück (hervorgehobene Videos für Hero-Bereich)'
     )
     @action(detail=False, methods=['get'])
     def featured(self, request):
-        """Gibt Featured Videos zurück"""
+        """Returns featured videos for hero section"""
         featured_videos = self.get_queryset().filter(is_featured=True)[:10]
-        serializer = VideoListSerializer(featured_videos, many=True)
+        serializer = VideoListSerializer(featured_videos, many=True, context={'request': request})
         return Response(serializer.data)
+    
+    @extend_schema(
+        description='Gibt ein zufälliges hervorgehobenes Video für den Hero-Bereich zurück'
+    )
+    @action(detail=False, methods=['get'])
+    def hero(self, request):
+        """Returns random featured video for hero section"""
+        hero_video = self.get_queryset().filter(is_featured=True).order_by('?').first()
+        if not hero_video:
+            hero_video = self.get_queryset().order_by('-view_count').first()
+        
+        if hero_video:
+            serializer = VideoDetailSerializer(hero_video, context={'request': request})
+            return Response(serializer.data)
+        
+        return Response({'detail': 'No videos available'}, status=status.HTTP_404_NOT_FOUND)
     
     @extend_schema(
         description='Gibt die beliebtesten Videos (nach Views) zurück'
@@ -254,6 +270,36 @@ class VideoViewSet(viewsets.ModelViewSet):
         video = self.get_object()
         serializer = VideoStreamSerializer(video)
         return Response(serializer.data)
+    
+    @extend_schema(
+        description='Gibt Videos gruppiert nach Genres/Kategorien zurück (für Dashboard)'
+    )
+    @action(detail=False, methods=['get'])
+    def by_category(self, request):
+        """Returns videos grouped by categories for dashboard"""
+        from django.db.models import Prefetch
+        
+        categories = Category.objects.prefetch_related(
+            Prefetch(
+                'videos',
+                queryset=self.get_queryset().order_by('-created_at')[:20]
+            )
+        ).all()
+        
+        result = []
+        for category in categories:
+            category_videos = category.videos.all()
+            if category_videos:
+                result.append({
+                    'category': CategorySerializer(category).data,
+                    'videos': VideoListSerializer(
+                        category_videos,
+                        many=True,
+                        context={'request': request}
+                    ).data
+                })
+        
+        return Response(result)
     
     @extend_schema(
         description='Gibt ähnliche Videos basierend auf Kategorien zurück'
