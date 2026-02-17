@@ -3,12 +3,18 @@ Utility functions for user authentication and management
 """
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMultiAlternatives
 from django.conf import settings
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.contrib.auth.tokens import default_token_generator
 from .models import User
+from .email_templates import (
+    get_activation_email_html,
+    get_activation_email_text,
+    get_password_reset_email_html,
+    get_password_reset_email_text
+)
 
 
 def get_user_by_email(email):
@@ -64,27 +70,39 @@ def generate_activation_token(user):
 
 
 def send_activation_email(user, uid, token):
-    """Send activation email to user"""
+    """Send HTML activation email to user"""
     activation_link = _build_activation_link(uid, token)
-    send_mail(
-        subject='Activate your Videoflix account',
-        message=f'Click the link to activate: {activation_link}',
+    
+    subject = 'Aktiviere dein Videoflix-Konto'
+    text_content = get_activation_email_text(activation_link)
+    html_content = get_activation_email_html(activation_link, user.email)
+    
+    email = EmailMultiAlternatives(
+        subject=subject,
+        body=text_content,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
+        to=[user.email]
     )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
 
 
 def send_password_reset_email(user, uid, token):
-    """Send password reset email to user"""
+    """Send HTML password reset email to user"""
     reset_link = _build_password_reset_link(uid, token)
-    send_mail(
-        subject='Password Reset - Videoflix',
-        message=f'Click the link to reset your password: {reset_link}',
+    
+    subject = 'Passwort zurücksetzen - Videoflix'
+    text_content = get_password_reset_email_text(reset_link)
+    html_content = get_password_reset_email_html(reset_link, user.email)
+    
+    email = EmailMultiAlternatives(
+        subject=subject,
+        body=text_content,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
+        to=[user.email]
     )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
 
 
 def _build_activation_link(uid, token):

@@ -26,12 +26,20 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ['id', 'email', 'password', 'confirmed_password']
         read_only_fields = ['id']
 
+    def validate_email(self, value):
+        """Check if email already exists"""
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError(
+                "Bitte überprüfe deine Eingaben und versuche es erneut."
+            )
+        return value
+    
     def validate(self, attrs):
-        """Validiert, dass beide Passwörter übereinstimmen"""
+        """Validate that both passwords match"""
         if attrs['password'] != attrs['confirmed_password']:
-            raise serializers.ValidationError({
-                "password": "Passwörter stimmen nicht überein."
-            })
+            raise serializers.ValidationError(
+                "Bitte überprüfe deine Eingaben und versuche es erneut."
+            )
         return attrs
 
     def create(self, validated_data):

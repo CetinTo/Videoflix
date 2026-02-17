@@ -336,53 +336,29 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         
-        if serializer.is_valid():
-            user = serializer.save()
-            
-            # Generiere Aktivierungs-Token
-            token = default_token_generator.make_token(user)
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            
-            # Aktivierungs-Link (für E-Mail)
-            activation_link = f"{settings.FRONTEND_URL}/activate/{uid}/{token}/" if hasattr(settings, 'FRONTEND_URL') else f"http://localhost:4200/activate/{uid}/{token}/"
-            
-            # Sende Aktivierungs-E-Mail
-            try:
-                send_mail(
-                    subject='Aktiviere dein Videoflix-Konto',
-                    message=f'Bitte aktiviere dein Konto: {activation_link}',
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[user.email],
-                    fail_silently=False,
-                )
-            except Exception as e:
-                # Log error but don't fail registration
-                print(f"E-Mail-Versand fehlgeschlagen: {e}")
-            
-            # Erstelle JWT Token für Response (nur zur Info, nicht für Login)
-            refresh = RefreshToken.for_user(user)
-            
-            response_data = {
-                "user": {
-                    "id": user.id,
-                    "email": user.email
-                },
-                "token": str(refresh.access_token)  # Nur zur Demonstration
-            }
-            
-            # Setze HTTP-Only Cookie (optional, für spätere Verwendung)
-            response = Response(response_data, status=status.HTTP_201_CREATED)
-            response.set_cookie(
-                key='access_token',
-                value=str(refresh.access_token),
-                httponly=True,
-                secure=False,  # True in Production mit HTTPS
-                samesite='Lax'
+        if not serializer.is_valid():
+            return Response(
+                {'error': 'Bitte überprüfe deine Eingaben und versuche es erneut.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            
-            return response
         
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = serializer.save()
+            uid, token = generate_activation_token(user)
+            send_activation_email(user, uid, token)
+            
+            return Response(
+                {
+                    'detail': 'Registrierung erfolgreich. Bitte prüfe deine E-Mails zur Aktivierung.',
+                    'email': user.email
+                },
+                status=status.HTTP_201_CREATED
+            )
+        except Exception as e:
+            return Response(
+                {'error': 'Bitte überprüfe deine Eingaben und versuche es erneut.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class ActivateAccountView(APIView):
