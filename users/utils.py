@@ -30,7 +30,12 @@ def authenticate_user(email, password):
     user = get_user_by_email(email)
     if not user:
         return None
-    return authenticate(username=user.username, password=password)
+    
+    # Check password directly
+    if user.check_password(password):
+        return user
+    
+    return None
 
 
 def generate_jwt_tokens(user):
