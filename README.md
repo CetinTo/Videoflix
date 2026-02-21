@@ -115,6 +115,7 @@ python manage.py runserver
 | POST | `/api/register/` | User registration |
 | GET | `/api/activate/<uidb64>/<token>/` | Email activation |
 | POST | `/api/login/` | Login (JWT + HTTP-Only cookies) |
+| POST | `/api/logout/` | Logout (invalidates auth cookies) |
 | POST | `/api/token/refresh/` | Refresh JWT token |
 | POST | `/api/password_reset/` | Request password reset |
 | POST | `/api/password_confirm/<uidb64>/<token>/` | Set new password |
