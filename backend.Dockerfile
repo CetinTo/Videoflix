@@ -10,13 +10,14 @@ COPY . .
 
 RUN apk update && \
     apk add --no-cache --upgrade bash && \
-    apk add --no-cache postgresql-client ffmpeg && \
+    apk add --no-cache postgresql-client ffmpeg netcat-openbsd && \
     apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev && \
     pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r videoflix-backend/requirements.txt && \
     apk del .build-deps && \
+    sed -i 's/\r$//' backend.entrypoint.sh && \
     chmod +x backend.entrypoint.sh
 
 EXPOSE 8000
 
-ENTRYPOINT [ "./backend.entrypoint.sh" ]
+ENTRYPOINT ["/bin/bash", "-c", "tr -d '\\r' < backend.entrypoint.sh > /tmp/entrypoint.sh && chmod +x /tmp/entrypoint.sh && exec /tmp/entrypoint.sh"]

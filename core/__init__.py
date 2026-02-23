@@ -1,1 +1,0 @@
-# Videoflix Django Project

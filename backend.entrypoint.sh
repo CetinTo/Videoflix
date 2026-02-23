@@ -18,6 +18,9 @@ while ! nc -z $REDIS_HOST $REDIS_PORT; do
 done
 echo "Redis started!"
 
+# Im videoflix-backend-Verzeichnis arbeiten (einziges Backend)
+cd /app/videoflix-backend || exit 1
+
 # Erstelle logs Verzeichnis
 mkdir -p logs
 

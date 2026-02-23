@@ -42,7 +42,7 @@ db.sqlite3-journal
 logs/
 *.log
 
-# Environment Variables
+# Environment variables (do not commit – contains secrets)
 .env
 .env.local
 .env.*.local

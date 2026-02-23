@@ -1,122 +1,107 @@
-# Videoflix Backend
+# Videoflix
 
-A Django REST Framework backend for a video streaming platform similar to Netflix.
+Video streaming platform (Netflix-style) with Django backend, HLS streaming, user auth, and legal pages (Imprint, Privacy Policy) in DE/EN.
 
-## 🚀 Features
+## Contents
 
-- **User Authentication**
-  - JWT-based authentication with HTTP-Only cookies
-  - Email activation
-  - Password reset functionality
-  - Custom user model
+- [Features](#-features)
+- [Tech Stack](#-tech-stack)
+- [Prerequisites](#-prerequisites)
+- [Installation & Setup](#-installation--setup)
+- [API Endpoints](#-api-endpoints)
+- [Project Structure](#-project-structure)
+- [Environment Variables](#-environment-variables)
+- [Management Commands](#-management-commands)
+- [License & Author](#-license--author)
 
-- **Video Management**
-  - Video upload and management
-  - Automatic HLS conversion in 4 qualities (360p, 480p, 720p, 1080p)
-  - Automatic thumbnail generation
-  - Video duration calculation
-  - Categorization and tagging
+## Features
 
-- **HLS Adaptive Streaming**
-  - M3U8 playlist generation
-  - TS segment delivery
-  - Multi-bitrate streaming
+- **Users & Auth:** Registration, email activation, login/logout (JWT + HTTP-Only cookies), password reset
+- **Videos:** Upload, HLS conversion (360p, 480p, 720p, 1080p), thumbnails, duration, categories
+- **Streaming:** M3U8 playlists, TS segments, fallback to original MP4 when HLS is missing
+- **Processing:** Django-RQ + Redis, FFmpeg/FFprobe in container
+- **Legal:** Imprint & Privacy Policy (DE/EN) served from backend API
+- **API Documentation:** Swagger/OpenAPI (drf-spectacular)
 
-- **Asynchronous Video Processing**
-  - Django-RQ for background tasks
-  - FFmpeg integration for video conversion
-  - Redis as message broker
+## Tech Stack
 
-- **API Documentation**
-  - Swagger/OpenAPI with drf-spectacular
-  - Interactive API documentation
+- **Backend:** Django 6.0, Django REST Framework 3.16
+- **DB:** PostgreSQL | **Cache/Queue:** Redis, Django-RQ, RQ 2.6
+- **Auth:** JWT (djangorestframework-simplejwt)
+- **Video:** FFmpeg (in Docker image)
+- **Deployment:** Docker & Docker Compose, Gunicorn
 
-## 🛠️ Tech Stack
-
-- **Framework:** Django 6.0.2
-- **API:** Django REST Framework 3.16.1
-- **Database:** PostgreSQL 18
-- **Cache & Queue:** Redis
-- **Task Queue:** Django-RQ with RQ 2.6.1
-- **Video Processing:** FFmpeg
-- **Authentication:** JWT (djangorestframework-simplejwt)
-- **Deployment:** Docker & Docker Compose
-- **Web Server:** Gunicorn
-
-## 📋 Prerequisites
+## Prerequisites
 
 - Docker & Docker Compose
-- Python 3.12+ (for local development without Docker)
-- FFmpeg (automatically installed in Docker container)
+- Optional (without Docker): Python 3.12+, PostgreSQL, Redis, FFmpeg
 
-## 🔧 Installation & Setup
+## Installation & Setup
 
-### With Docker (Recommended)
+### With Docker (recommended)
 
-1. **Clone repository:**
-```bash
-git clone https://github.com/CetinTo/Videoflix.git
-cd Videoflix
-```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/CetinTo/Videoflix.git
+   cd Videoflix
+   ```
 
-2. **Configure environment variables:**
-```bash
-# Copy .env.template to .env and adjust settings
-cp .env.template .env
-```
+2. **Environment variables**
+   - Copy `.env.template` (project root) to `.env` in the **same directory** (project root). Docker Compose loads this `.env` for the backend.
+   ```bash
+   cp .env.template .env
+   # Edit .env: SECRET_KEY, DB_PASSWORD, REDIS_PASSWORD, EMAIL_*, FRONTEND_URL
+   ```
+   - For local development without Docker: create `videoflix-backend/.env` from the template (e.g. `cp .env.template videoflix-backend/.env`).
 
-3. **Start Docker containers:**
-```bash
-docker-compose up --build
-```
+3. **Start containers**
+   ```bash
+   docker-compose up -d
+   ```
 
-4. **Backend runs on:**
-```
-http://localhost:8000
-```
+4. **Populate legal pages (Imprint/Privacy DE+EN)** (run from project root)
+   ```bash
+   docker-compose exec web python manage.py migrate info
+   docker-compose exec web python manage.py populate_legal_pages
+   ```
 
-### Without Docker (Local Development)
+Backend: **http://localhost:8000**  
+Frontend (static): **http://localhost:5500**  
+Admin: **http://localhost:8000/admin/**  
+API Docs: **http://localhost:8000/api/docs/**  
+RQ Dashboard: **http://localhost:8000/django-rq/**
 
-1. **Create virtual environment:**
-```bash
-python -m venv env
-env\Scripts\activate  # Windows
-source env/bin/activate  # Linux/Mac
-```
+### Without Docker (local development)
 
-2. **Install dependencies:**
-```bash
-pip install -r requirements.txt
-```
+1. Virtual environment and dependencies (in backend folder):
+   ```bash
+   cd videoflix-backend
+   python -m venv env
+   env\Scripts\activate   # Windows
+   pip install -r requirements.txt
+   ```
+2. Start PostgreSQL and Redis locally.
+3. Create `.env` from `.env.template` (e.g. `cp .env.template .env` in `videoflix-backend`) and adjust values (DB_HOST=localhost, REDIS_HOST=localhost, and ports if needed).
+4. Migrations and legal pages:
+   ```bash
+   python manage.py migrate
+   python manage.py populate_legal_pages
+   # Superuser is created on first start from .env (see backend.entrypoint.sh)
+   ```
+5. RQ worker (optional, for video processing): `python manage.py rqworker default &`
+6. Server: `python manage.py runserver`
 
-3. **Start database & Redis** (separately)
+## API Endpoints
 
-4. **Run migrations:**
-```bash
-python manage.py migrate
-```
-
-5. **Create superuser:**
-```bash
-python manage.py create_admin
-```
-
-6. **Start server:**
-```bash
-python manage.py runserver
-```
-
-## 📚 API Endpoints
-
-### Authentication
+### Auth
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/register/` | User registration |
+| POST | `/api/register/` | Register |
 | GET | `/api/activate/<uidb64>/<token>/` | Email activation |
-| POST | `/api/login/` | Login (JWT + HTTP-Only cookies) |
-| POST | `/api/logout/` | Logout (invalidates auth cookies) |
-| POST | `/api/token/refresh/` | Refresh JWT token |
+| POST | `/api/login/` | Login (JWT + cookies) |
+| POST | `/api/logout/` | Logout |
+| POST | `/api/token/refresh/` | Refresh token |
 | POST | `/api/password_reset/` | Request password reset |
 | POST | `/api/password_confirm/<uidb64>/<token>/` | Set new password |
 
@@ -127,179 +112,92 @@ python manage.py runserver
 | GET | `/api/video/` | List all videos |
 | GET | `/api/video/{id}/` | Video details |
 | POST | `/api/video/` | Upload video |
-| GET | `/api/video/{id}/{resolution}/index.m3u8` | HLS master playlist |
-| GET | `/api/video/{id}/{resolution}/{segment}/` | HLS video segment |
+| GET | `/api/video/{id}/{resolution}/index.m3u8` | HLS playlist (e.g. 480p) |
+| GET | `/api/video/{id}/{resolution}/{segment}/` | HLS segment or original.mp4 |
 
-### Admin & Documentation
+### Legal (DE/EN)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/legal/imprint/?lang=de` or `?lang=en` | Imprint |
+| GET | `/api/legal/privacy/?lang=de` or `?lang=en` | Privacy Policy |
+
+### Admin & Docs
 
 | Endpoint | Description |
 |----------|-------------|
-| `/admin/` | Django admin panel |
-| `/api/schema/swagger-ui/` | Swagger API documentation |
-| `/api/schema/redoc/` | ReDoc API documentation |
+| `/admin/` | Django admin |
+| `/api/docs/` | Swagger UI |
+| `/api/schema/` | OpenAPI schema |
+| `/django-rq/` | RQ dashboard |
 
-## 🔐 Default Credentials
-
-**Django Admin:**
-- Email: `admin@videoflix.com`
-- Password: `adminpassword`
-
-⚠️ **Important:** Use these credentials for development only!
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 Videoflix/
-├── core/                   # Django project configuration
-│   ├── settings.py        # Main settings
-│   ├── urls.py            # URL routing
-│   └── signals.py         # Central Django signals
-├── users/                 # User app
-│   ├── models.py          # Custom user model
-│   ├── views.py           # Auth endpoints
-│   └── serializers.py     # User serializers
-├── videos/                # Video app
-│   ├── models.py          # Video, Category, Rating models
-│   ├── views.py           # Video endpoints
-│   ├── tasks.py           # Video processing (RQ tasks)
-│   └── serializers.py     # Video serializers
-├── media/                 # Uploaded files
-│   └── videos/            # Videos + HLS segments
-├── static/                # Static files
-├── .env                   # Environment variables
-├── docker-compose.yml     # Docker Compose configuration
-├── backend.Dockerfile     # Backend Docker image
-└── requirements.txt       # Python dependencies
+├── .env.template              # Environment variables template (copy to .env)
+├── .env                       # Local env vars (not versioned, used by Docker)
+├── docker-compose.yml         # Docker setup (db, redis, web, frontend)
+├── backend.Dockerfile        # Backend image
+├── backend.entrypoint.sh      # Entrypoint: migrations, superuser, Gunicorn, RQ
+├── README.md
+├── pages/                     # Frontend (static pages)
+│   ├── imprint/               # Imprint (loads content from API)
+│   ├── privacy/               # Privacy Policy (loads content from API)
+│   ├── auth/
+│   └── video_list/
+└── videoflix-backend/         # Django backend
+    ├── .env                   # Optional: for local development without Docker
+    ├── .env.template          # Copy of env template (reference)
+    ├── core/                  # Project config, URLs, settings
+    ├── users/                 # Users, auth
+    ├── videos/                # Videos, HLS, RQ tasks
+    ├── info/                  # Legal pages (Imprint, Privacy DE/EN)
+    ├── media/                 # Uploaded files (videos, thumbnails)
+    └── requirements.txt       # Python dependencies
 ```
 
-## 🎥 Video Processing
+## Environment Variables
 
-Videos are automatically processed on upload:
+All variables needed to set up the project are in `.env.template` (project root). After copying to `.env`, adjust at least: `SECRET_KEY`, `DB_PASSWORD`, `REDIS_PASSWORD`, `FRONTEND_URL`, and for email activation/password reset: `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`.
 
-1. **Upload** → Original video saved
-2. **Duration Calculation** → FFprobe determines video length
-3. **Thumbnail Generation** → Screenshot at second 5
-4. **HLS Conversion** → Conversion to 4 qualities:
-   - 360p (640x360, 800k bitrate)
-   - 480p (854x480, 1400k bitrate)
-   - 720p (1280x720, 2800k bitrate)
-   - 1080p (1920x1080, 5000k bitrate)
-5. **Segmentation** → 10-second TS segments + M3U8 playlists
+| Section | Variables |
+|--------|-----------|
+| **Django** | `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `FRONTEND_URL` |
+| **Superuser** (first start) | `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_PASSWORD`, `DJANGO_SUPERUSER_EMAIL` |
+| **PostgreSQL** | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` |
+| **Redis** | `REDIS_HOST`, `REDIS_PASSWORD`, `REDIS_LOCATION`, `REDIS_PORT`, `REDIS_DB` |
+| **Email (SMTP)** | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL` |
 
-**Directory structure after processing:**
-```
-media/videos/my_video/
-├── original.mp4
-├── thumbnail.jpg
-├── hls_360p/
-│   ├── index.m3u8
-│   ├── segment_000.ts
-│   └── ...
-├── hls_480p/
-│   └── ...
-├── hls_720p/
-│   └── ...
-└── hls_1080p/
-    └── ...
-```
+Note: `REDIS_LOCATION` must use the same password as `REDIS_PASSWORD` (e.g. `redis://:foobared@redis:6379/1`).
 
-## 🐳 Docker Services
-
-- **web:** Django backend (Port 8000)
-- **db:** PostgreSQL database
-- **redis:** Redis cache & message broker
-
-## 🔧 Development
-
-### Django Management Commands
+## Management Commands
 
 ```bash
-# Create migrations
-docker-compose exec web python manage.py makemigrations
-
-# Apply migrations
+# Migrations
 docker-compose exec web python manage.py migrate
+docker-compose exec web python manage.py migrate info   # Legal pages (language)
 
-# Create admin user
-docker-compose exec web python manage.py create_admin
+# Populate legal pages (DE/EN)
+docker-compose exec web python manage.py populate_legal_pages
 
-# Django shell
-docker-compose exec web python manage.py shell
+# Reprocess video (duration, thumbnail, HLS)
+docker-compose exec web python manage.py reprocess_video <video_id>
 
-# RQ worker status
+# Check if video file exists on disk
+docker-compose exec web python manage.py video_path_check [video_id]
+
+# RQ status
 docker-compose exec web python manage.py rqstats
 ```
 
-### View Logs
+## Default Credentials (development)
 
-```bash
-# All containers
-docker-compose logs -f
+From `.env.template`: admin email e.g. `admin@videoflix.com`, password `changeme` – after first start from `.env` (e.g. `adminpassword`). For development only.
 
-# Backend only
-docker-compose logs -f web
-```
+## License & Author
 
-## 📝 Environment Variables
-
-Important `.env` settings:
-
-```env
-# Django
-DEBUG=True
-SECRET_KEY=your-secret-key
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-# Database
-DB_NAME=videoflix_db
-DB_USER=videoflix_user
-DB_PASSWORD=your-secure-password
-DB_HOST=db
-DB_PORT=5432
-
-# Redis
-REDIS_HOST=redis
-REDIS_PASSWORD=foobared
-REDIS_PORT=6379
-
-# Email (SMTP)
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=your-email@gmail.com
-EMAIL_HOST_PASSWORD=your-app-password
-```
-
-## 🚀 Deployment
-
-### For Production:
-
-1. **Adjust .env:**
-   - Set `DEBUG=False`
-   - Generate strong `SECRET_KEY`
-   - Use secure passwords
-   - Adjust `ALLOWED_HOSTS`
-
-2. **Collect static files:**
-```bash
-docker-compose exec web python manage.py collectstatic --noinput
-```
-
-3. **Setup HTTPS** (e.g., with Nginx + Let's Encrypt)
-
-4. **Setup database backups**
-
-## 📄 License
-
-This project is created for educational purposes.
-
-## 👤 Author
-
-Cetin Toker
-
-## 🤝 Contributing
-
-Pull requests are welcome! For major changes, please open an issue first.
-
-## 📞 Support
+Project for educational purposes.  
+Author: **Cetin Toker**
 
 For questions or issues, please open an issue on GitHub.
