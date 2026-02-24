@@ -119,9 +119,10 @@ def _build_activation_link(uid, token):
 
 
 def _build_password_reset_link(uid, token):
-    """Build password reset URL"""
-    base_url = _get_frontend_url()
-    return f"{base_url}/password-reset-confirm/{uid}/{token}/"
+    """Build password reset URL (Frontend expects: .../confirm_password.html?uid=...&token=...)"""
+    from urllib.parse import quote
+    base_url = _get_frontend_url().rstrip('/')
+    return f"{base_url}/pages/auth/confirm_password.html?uid={quote(uid)}&token={quote(token)}"
 
 
 def _get_frontend_url():

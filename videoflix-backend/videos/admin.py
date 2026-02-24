@@ -47,10 +47,6 @@ class VideoAdmin(admin.ModelAdmin):
         (_('Video-Dateien'), {
             'fields': (
                 'original_video',
-                'video_360p',
-                'video_480p',
-                'video_720p',
-                'video_1080p',
                 'thumbnail',
                 'thumbnail_preview'
             )

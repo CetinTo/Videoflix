@@ -65,11 +65,14 @@ Video streaming platform (Netflix-style) with Django backend, HLS streaming, use
    docker-compose exec web python manage.py populate_legal_pages
    ```
 
-Backend: **http://localhost:8000**  
-Frontend (static): **http://localhost:5500**  
-Admin: **http://localhost:8000/admin/**  
-API Docs: **http://localhost:8000/api/docs/**  
-RQ Dashboard: **http://localhost:8000/django-rq/**
+**Backend** läuft auf **http://127.0.0.1:8000** (bzw. http://localhost:8000).  
+**Frontend** (statische Seiten) läuft auf **http://127.0.0.1:5500** (bzw. http://localhost:5500).
+
+- Backend / API: http://127.0.0.1:8000  
+- Frontend: http://127.0.0.1:5500  
+- Admin: http://127.0.0.1:8000/admin/  
+- API Docs: http://127.0.0.1:8000/api/docs/  
+- RQ Dashboard: http://127.0.0.1:8000/django-rq/
 
 ### Without Docker (local development)
 
