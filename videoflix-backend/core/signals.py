@@ -21,7 +21,10 @@ User = get_user_model()
 @receiver(post_save, sender=User)
 def user_post_save(sender, instance, created, **kwargs):
     """
-    Signal triggered after a User is saved
+    Handle post-save events for the custom User model.
+
+    - Log when a new user is created
+    - Log when an existing user is updated
     """
     if created:
         logger.info(f'New user created: {instance.email}')
@@ -32,7 +35,10 @@ def user_post_save(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=User)
 def user_post_delete(sender, instance, **kwargs):
     """
-    Signal triggered after a User is deleted
+    Handle post-delete events for the custom User model.
+
+    - Log the deletion
+    - Optionally delete the profile picture from disk
     """
     logger.info(f'User deleted: {instance.email} (ID: {instance.id})')
     
@@ -47,27 +53,48 @@ def user_post_delete(sender, instance, **kwargs):
 # VIDEO SIGNALS
 # ================================
 
+def _should_enqueue_video_processing(instance, created):
+    """
+    Decide whether the video processing job should be enqueued.
+
+    Rules:
+    - New `Video` instance with an `original_video` → enqueue
+    - Existing `Video` that just received an `original_video` while still in `draft` → enqueue
+    - Do NOT enqueue when the status is not `draft` (already processing or published)
+    """
+    if not instance.original_video:
+        return False
+    if created:
+        return True
+    # Only trigger again while the video is still in draft
+    # (e.g. when an original file is uploaded later).
+    if instance.status != 'draft':
+        return False
+    if instance.video_360p:
+        return False
+    return True
+
+
 @receiver(post_save, sender='videos.Video')
 def auto_process_video(sender, instance, created, **kwargs):
     """
-    Signal: Automatically starts video processing after upload
-    
-    Triggered when a new video is created
+    Post-save signal for the `Video` model.
+
+    It queues the asynchronous processing task (duration, thumbnail, HLS conversion)
+    via Django-RQ when:
+    - a new video with an `original_video` is created, or
+    - an existing draft video receives an `original_video` and has not been processed yet.
     """
-    if created and instance.original_video:
-        logger.info(f'New video uploaded: {instance.title}')
-        logger.info('Starting video processing in queue')
-        
-        # Import here to avoid circular imports
-        from videos.tasks import process_uploaded_video
-        
-        # Add video processing to RQ queue
-        queue = django_rq.get_queue('default')
-        queue.enqueue(
-            process_uploaded_video,
-            instance.id,
-            timeout='1h',  # Max. 1 hour for processing
-            result_ttl=86400  # Keep result for 24 hours
-        )
-        
-        logger.info(f'Video processing queued for video ID {instance.id}')
+    if not _should_enqueue_video_processing(instance, created):
+        return
+
+    logger.info(f'Video upload/update: {instance.title} (ID {instance.id}) – starting processing in queue')
+
+    # Import here to avoid circular imports
+    from videos.tasks import process_uploaded_video
+
+    # Enqueue the job without extra kwargs so RQ does not pass
+    # unexpected keyword arguments into `process_uploaded_video`.
+    queue = django_rq.get_queue('default')
+    queue.enqueue(process_uploaded_video, instance.id)
+    logger.info(f'Video processing queued for video ID {instance.id}')

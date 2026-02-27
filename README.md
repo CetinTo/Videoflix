@@ -10,6 +10,7 @@ Video streaming platform (Netflix-style) with Django backend, HLS streaming, use
 - [Installation & Setup](#-installation--setup)
 - [API Endpoints](#-api-endpoints)
 - [Project Structure](#-project-structure)
+- [Background Processing & Signals](#-background-processing--signals)
 - [Environment Variables](#-environment-variables)
 - [Management Commands](#-management-commands)
 - [License & Author](#-license--author)
@@ -152,13 +153,44 @@ Videoflix/
 └── videoflix-backend/         # Django backend
     ├── .env                   # Optional: for local development without Docker
     ├── .env.template          # Copy of env template (reference)
-    ├── core/                  # Project config, URLs, settings
+    ├── core/                  # Project config, URLs, settings, signals
+    ├── api/                   # DRF API layer (viewsets, serializers, URL routing)
     ├── users/                 # Users, auth
-    ├── videos/                # Videos, HLS, RQ tasks
+    ├── videos/                # Videos, FFmpeg/HLS utils, RQ tasks, models
     ├── info/                  # Legal pages (Imprint, Privacy DE/EN)
-    ├── media/                 # Uploaded files (videos, thumbnails)
+    ├── media/                 # Uploaded files (videos, thumbnails, HLS segments)
     └── requirements.txt       # Python dependencies
 ```
+
+## Background Processing & Signals
+
+- **RQ Worker**
+  - A Django-RQ worker is started from `backend.entrypoint.sh` inside the `web` container:
+    - Queue name: `default`
+    - Responsible for all heavy video processing (FFmpeg)
+
+- **Signals (`core/signals.py`)**
+  - `post_save` on `videos.Video` (`auto_process_video`):
+    - Enqueues `videos.tasks.process_uploaded_video(video_id)` on the `default` queue
+    - Trigger conditions:
+      - New `Video` with `original_video` (created in admin/API)
+      - Existing `Video` in status `draft` that just received an `original_video`
+    - Guard conditions (no enqueue):
+      - `status` is not `draft` (`processing`, `published`, `archived`)
+      - `original_video` is missing
+  - `post_save` / `post_delete` on `users.User`:
+    - Only used for logging and optional profile-picture cleanup
+
+- **Processing Pipeline (`videos/tasks.py`)**
+  - `process_uploaded_video(video_id)`:
+    - Sets `status='processing'`
+    - Extracts video duration (ffprobe) and stores it on the `Video` model
+    - Generates a thumbnail and stores it on `Video.thumbnail`
+    - Creates HLS playlists and segments for all resolutions (`360p`, `480p`, `720p`, `1080p`)
+    - Sets `status='published'` when everything finished successfully
+  - If something fails (FFmpeg error, missing file, etc.), the job logs the error and the status can be inspected via the RQ dashboard.
+
+In short: **you only upload a file in the admin or via `/api/video/` – the rest (duration, thumbnail, HLS) is handled asynchronously by the worker via Django signals and RQ.**
 
 ## Environment Variables
 

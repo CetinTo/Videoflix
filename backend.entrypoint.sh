@@ -54,11 +54,15 @@ else:
 END
 
 echo "==================================="
+echo "Starting RQ Worker (default queue)..."
+echo "==================================="
+python manage.py rqworker default &
+RQ_PID=$!
+echo "RQ Worker started (PID $RQ_PID)"
+
+echo "==================================="
 echo "Starting Gunicorn..."
 echo "==================================="
-
-# Starte RQ Worker im Hintergrund
-python manage.py rqworker default &
 
 # Starte Gunicorn
 exec gunicorn core.wsgi:application \

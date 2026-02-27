@@ -38,7 +38,7 @@ services:
   frontend:
     image: python:3.12-alpine
     container_name: videoflix_frontend
-    working_dir: /app/videoflix-backend
+    working_dir: /app
     command: python -m http.server 5500 --bind 0.0.0.0
     volumes:
       - .:/app
