@@ -26,18 +26,17 @@ services:
 
     volumes:
       - .:/app
-      # Lokaler media-Ordner – hier abgelegte Videos sind im Container sichtbar
-      - ./media:/app/media
+      # Projekt-Root für Frontend-Serving (index.html, shared/, assets/, pages/)
+      - ..:/frontend
       - videoflix_static:/app/static
     ports:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - FRONTEND_ROOT=/frontend
     depends_on:
       - db
       - redis
-
-
 
 
 volumes:

@@ -57,10 +57,20 @@ echo "==================================="
 # Starte RQ Worker im Hintergrund
 python manage.py rqworker default &
 
-# Starte Gunicorn
-exec gunicorn core.wsgi:application \
-    --bind 0.0.0.0:8000 \
-    --workers 4 \
-    --timeout 120 \
-    --access-logfile - \
-    --error-logfile -
+# Starte Gunicorn (--reload bei DEBUG für automatischen Neustart bei Code-Änderungen)
+if [ "$DEBUG" = "True" ]; then
+    exec gunicorn core.wsgi:application \
+        --bind 0.0.0.0:8000 \
+        --workers 1 \
+        --timeout 120 \
+        --reload \
+        --access-logfile - \
+        --error-logfile -
+else
+    exec gunicorn core.wsgi:application \
+        --bind 0.0.0.0:8000 \
+        --workers 4 \
+        --timeout 120 \
+        --access-logfile - \
+        --error-logfile -
+fi

@@ -1,4 +1,4 @@
-from django.db.models import Avg
+from django.db.models import Avg, Prefetch
 from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -33,75 +33,68 @@ from videos.utils import (
 )
 
 
-@extend_schema_view(
-    list=extend_schema(description='List all categories'),
-    retrieve=extend_schema(description='Retrieve category details'),
-)
-class VideoHLSView(APIView):
-    """
-    Return the HLS master playlist (M3U8) for a given video and resolution.
+def validate_video_and_resolution(video, resolution):
+    """Validate video exists and resolution is valid."""
+    invalid_response = validate_hls_resolution(resolution)
+    return invalid_response if invalid_response else (video, None)
 
-    GET /api/video/<int:movie_id>/<str:resolution>/index.m3u8
-    """
+
+def get_video_stream_response(movie_id, resolution):
+    """Get HLS M3U8 response for video and resolution. Raises Http404 if not found."""
+    video = get_published_video(movie_id)
+    invalid_response = validate_hls_resolution(resolution)
+    if invalid_response:
+        return invalid_response
+    original_path = get_original_video_path(video)
+    if not original_path:
+        raise Http404('Video file not found')
+    m3u8_path = build_m3u8_path(original_path, resolution)
+    response = serve_m3u8_or_fallback(m3u8_path, original_path)
+    if not response:
+        raise Http404(f'M3U8 not found for {resolution}')
+    return response
+
+
+class VideoHLSView(APIView):
+    """Return HLS master playlist (M3U8) for video and resolution."""
     permission_classes = [permissions.AllowAny]
-    
-    @extend_schema(
-        description='Returns the HLS master playlist (M3U8) for the given video and resolution.',
-        responses={
-            200: {
-                'type': 'string',
-                'description': 'HLS-Manifestdatei im M3U8-Format',
-                'content': {'application/vnd.apple.mpegurl': {}}
-            },
-            404: {'description': 'Video or manifest not found'}
-        }
-    )
+
     def get(self, request, movie_id, resolution):
-        """Return HLS M3U8 playlist for the given video and resolution."""
-        video = get_published_video(movie_id)
-        invalid_response = validate_hls_resolution(resolution)
-        if invalid_response is not None:
-            return invalid_response
-        original_path = get_original_video_path(video)
-        if not original_path:
-            raise Http404('Video file not found on disk.')
-        m3u8_path = build_m3u8_path(original_path, resolution)
-        response = serve_m3u8_or_fallback(m3u8_path, original_path)
-        if response is not None:
-            return response
-        raise Http404(f"M3U8 not found for {resolution}. Video processing may not be complete yet.")
+        """Return HLS M3U8 playlist."""
+        return get_video_stream_response(movie_id, resolution)
+
+
+def get_segment_response(movie_id, resolution, segment):
+    """Get HLS segment response (original.mp4 or .ts file)."""
+    video = get_published_video(movie_id)
+    invalid_response = validate_hls_resolution(resolution)
+    if invalid_response:
+        return invalid_response
+    
+    validate_segment_name(segment)
+    original_path = get_original_video_path(video)
+    if not original_path:
+        raise Http404('Video file not found')
+    
+    return serve_original_mp4 if segment == 'original.mp4' else serve_ts_segment
 
 
 class VideoSegmentView(APIView):
-    """
-    Return a single HLS video segment for a given video and resolution.
-
-    GET /api/video/<int:movie_id>/<str:resolution>/<str:segment>/
-    """
+    """Return a single HLS video segment for given video and resolution."""
     permission_classes = [permissions.AllowAny]
 
-    @extend_schema(
-        description='Returns a single HLS segment (original.mp4 or .ts) for the given video and resolution.',
-        responses={
-            200: {
-                'type': 'string',
-                'format': 'binary',
-                'description': 'Binary TS or MP4 segment',
-                'content': {'video/MP2T': {}}
-            },
-            404: {'description': 'Video or segment not found'}
-        }
-    )
     def get(self, request, movie_id, resolution, segment):
-        """Return HLS segment (original.mp4 or .ts file) for the given video and resolution."""
+        """Return HLS segment (original.mp4 or .ts file)."""
         video = get_published_video(movie_id)
         invalid_response = validate_hls_resolution(resolution)
-        if invalid_response is not None:
+        if invalid_response:
             return invalid_response
+        
         validate_segment_name(segment)
         original_path = get_original_video_path(video)
         if not original_path:
-            raise Http404('Video file not found on disk.')
+            raise Http404('Video file not found')
+        
         if segment == 'original.mp4':
             return serve_original_mp4(request, original_path)
         return serve_ts_segment(original_path, resolution, segment)
@@ -152,15 +145,10 @@ class VideoViewSet(viewsets.ModelViewSet):
         return context
     
     def list(self, request, *args, **kwargs):
-        """Return list of videos as JSON array; on error return empty array."""
-        try:
-            queryset = self.filter_queryset(self.get_queryset())
-            serializer = self.get_serializer(queryset, many=True)
-            data = list(serializer.data)  # Liste erzwingen, falls Lazy-Evaluation Probleme macht
-            return Response(data)
-        except Exception as e:
-            logger.exception('Video list error: %s', e)
-        return Response([], status=status.HTTP_200_OK)
+        """Return list of videos as JSON array."""
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
     
     def retrieve(self, request, *args, **kwargs):
         """Increment view count when retrieving a video."""
@@ -219,32 +207,19 @@ class VideoViewSet(viewsets.ModelViewSet):
         serializer = VideoStreamSerializer(video)
         return Response(serializer.data)
     
-    @extend_schema(
-        description='Return videos grouped by category (for dashboard)'
-    )
     @action(detail=False, methods=['get'])
     def by_category(self, request):
-        """Returns videos grouped by categories for dashboard"""
-        from django.db.models import Prefetch
-        
+        """Return videos grouped by categories for dashboard."""
         categories = Category.objects.prefetch_related(
-            Prefetch(
-                'videos',
-                queryset=self.get_queryset().order_by('-created_at')[:20]
-            )
-        ).all()
+            Prefetch('videos', queryset=self.get_queryset().order_by('-created_at')[:20])
+        )
         
         result = []
         for category in categories:
-            category_videos = category.videos.all()
-            if category_videos:
+            if category.videos.exists():
                 result.append({
                     'category': CategorySerializer(category).data,
-                    'videos': VideoListSerializer(
-                        category_videos,
-                        many=True,
-                        context={'request': request}
-                    ).data
+                    'videos': VideoListSerializer(category.videos.all(), many=True, context={'request': request}).data
                 })
         
         return Response(result)

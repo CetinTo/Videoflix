@@ -1,15 +1,15 @@
 from rest_framework import serializers
-from .models import LegalPage
+from info.models import LegalPage
 
 
 class LegalPageSerializer(serializers.ModelSerializer):
     """Serializer for legal pages"""
-    
+
     page_type_display = serializers.CharField(
         source='get_page_type_display',
         read_only=True
     )
-    
+
     class Meta:
         model = LegalPage
         fields = [

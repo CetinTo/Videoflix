@@ -66,8 +66,6 @@ def _should_enqueue_video_processing(instance, created):
         return False
     if created:
         return True
-    # Only trigger again while the video is still in draft
-    # (e.g. when an original file is uploaded later).
     if instance.status != 'draft':
         return False
     if instance.video_360p:
@@ -75,26 +73,21 @@ def _should_enqueue_video_processing(instance, created):
     return True
 
 
+def _enqueue_video_processing(video_id):
+    """Enqueue video processing job in Django-RQ."""
+    from videos.tasks import process_uploaded_video
+    queue = django_rq.get_queue('default')
+    queue.enqueue(process_uploaded_video, video_id)
+
+
 @receiver(post_save, sender='videos.Video')
 def auto_process_video(sender, instance, created, **kwargs):
     """
     Post-save signal for the `Video` model.
-
-    It queues the asynchronous processing task (duration, thumbnail, HLS conversion)
-    via Django-RQ when:
-    - a new video with an `original_video` is created, or
-    - an existing draft video receives an `original_video` and has not been processed yet.
+    Queues processing (duration, thumbnail, HLS) via Django-RQ when appropriate.
     """
     if not _should_enqueue_video_processing(instance, created):
         return
-
     logger.info(f'Video upload/update: {instance.title} (ID {instance.id}) – starting processing in queue')
-
-    # Import here to avoid circular imports
-    from videos.tasks import process_uploaded_video
-
-    # Enqueue the job without extra kwargs so RQ does not pass
-    # unexpected keyword arguments into `process_uploaded_video`.
-    queue = django_rq.get_queue('default')
-    queue.enqueue(process_uploaded_video, instance.id)
+    _enqueue_video_processing(instance.id)
     logger.info(f'Video processing queued for video ID {instance.id}')

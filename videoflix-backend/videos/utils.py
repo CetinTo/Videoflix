@@ -1,10 +1,9 @@
 """
 Utility functions for video processing, file management, and HLS streaming.
 
-- Video processing: FFmpeg commands, duration, thumbnails, HLS conversion.
-- File paths: get_original_video_path, get_output_path, etc.
-- HLS streaming: helpers used by VideoHLSView and VideoSegmentView (serve file with range,
-  M3U8/segment delivery). Views remain in views.py and only return HTTP responses.
+Video processing: FFmpeg commands, duration, thumbnails, HLS conversion.
+File paths: get original video path, output path, etc.
+HLS streaming: serve files with range support, M3U8/segment delivery.
 """
 import logging
 import os
@@ -19,11 +18,7 @@ from rest_framework.response import Response
 from .models import Video
 
 logger = logging.getLogger(__name__)
-
-# Default chunk size for range requests (1 MB)
 STREAM_CHUNK_SIZE = 1024 * 1024
-
-# Allowed HLS resolution query values
 VALID_HLS_RESOLUTIONS = ['360p', '480p', '720p', '1080p']
 
 
@@ -36,24 +31,48 @@ def get_video_by_id(video_id):
         return None
 
 
-def get_original_video_path(video):
-    """
-    Return the filesystem path of the video's original file.
-    Uses MEDIA_ROOT + name if .path is not available (e.g. default storage).
-    """
-    if not video or not video.original_video:
-        return None
+def _try_path_from_field(video):
+    """Try to get path from video.original_video.path. Returns path or None."""
     try:
         path = video.original_video.path
         if path and os.path.isfile(path):
             return path
     except Exception:
         pass
+    return None
+
+
+def _try_path_from_media_root(video):
+    """Try path from MEDIA_ROOT + name. Returns path or None."""
     name = video.original_video.name
     if not name:
         return None
     path = os.path.join(settings.MEDIA_ROOT, name)
     return path if os.path.isfile(path) else None
+
+
+def _try_fallback_path(video):
+    """Fallback: videos/{id}/{filename} when DB has videos/None/ or temp_xxx/."""
+    name = video.original_video.name
+    if not name:
+        return None
+    fallback = os.path.join(settings.MEDIA_ROOT, 'videos', str(video.id), os.path.basename(name))
+    return fallback if os.path.isfile(fallback) else None
+
+
+def get_original_video_path(video):
+    """
+    Return the filesystem path of the video's original file.
+    Uses MEDIA_ROOT + name if .path is not available (e.g. default storage).
+    Fallback: videos/{id}/{filename} wenn DB-Pfad videos/None/ oder temp_xxx/ enthält.
+    """
+    if not video or not video.original_video:
+        return None
+    return (
+        _try_path_from_field(video)
+        or _try_path_from_media_root(video)
+        or _try_fallback_path(video)
+    )
 
 
 def get_output_path(input_path, suffix):
@@ -165,8 +184,7 @@ def build_thumbnail_command(input_path, output_path, timestamp='00:00:05'):
 
 
 def save_thumbnail_file(video, file_path):
-    """Save thumbnail file to video model"""
-    from django.core.files import File
+    """Save thumbnail file to video model."""
     filename = os.path.basename(file_path)
     with open(file_path, 'rb') as f:
         video.thumbnail.save(filename, File(f), save=True)
@@ -182,56 +200,51 @@ def update_video_duration(video, duration_seconds):
 # HLS streaming helpers (used by views.py; views only return HTTP responses)
 # -----------------------------------------------------------------------------
 
-def send_full_file_response(file_path, content_type, filename):
-    """Return HTTP 200 response with full file body."""
-    with open(file_path, 'rb') as f:
-        data = f.read()
-    size = len(data)
-    response = HttpResponse(data, status=200, content_type=content_type)
-    response['Content-Length'] = size
+def build_http_response(data, status_code, content_type, filename, range_info=None):
+    """Build HTTP response with headers for file serving."""
+    response = HttpResponse(data, status=status_code, content_type=content_type)
     response['Accept-Ranges'] = 'bytes'
     response['Content-Disposition'] = f'inline; filename="{filename}"'
+    response['Content-Length'] = len(data)
+    if range_info:
+        response['Content-Range'] = range_info
     return response
 
 
-def parse_byte_range(range_header, file_size, full_file_if_no_range):
-    """Parse Range header; return (start, end) for the byte range."""
+def get_byte_range_from_header(range_header, file_size, full_if_no_range):
+    """Extract and validate byte range from header."""
+    if not range_header or not range_header.startswith('bytes='):
+        if full_if_no_range:
+            return 0, file_size - 1
+        return 0, min(STREAM_CHUNK_SIZE, file_size) - 1
+    
     try:
-        range_str = range_header.strip()[6:]
+        range_str = range_header[6:].strip()
         parts = range_str.split('-')
         start = int(parts[0]) if parts[0] else 0
-        end = min(int(parts[1]), file_size - 1) if len(parts) > 1 and parts[1] else file_size - 1
-        if not full_file_if_no_range and end - start + 1 > STREAM_CHUNK_SIZE:
-            end = start + STREAM_CHUNK_SIZE - 1
-        if start > end or start < 0:
-            start, end = 0, min(STREAM_CHUNK_SIZE, file_size) - 1
+        end = int(parts[1]) if len(parts) > 1 and parts[1] else file_size - 1
+        end = min(end, file_size - 1)
         return start, end
     except (ValueError, IndexError):
         return 0, min(STREAM_CHUNK_SIZE, file_size) - 1
 
 
 def serve_file_with_range(request, file_path, content_type, filename, full_file_if_no_range=False):
-    """
-    Serve a file with Range request support (206) or full file (200).
-    When full_file_if_no_range is True and no Range header is sent, returns full file (for HLS).
-    """
-    size = os.path.getsize(file_path)
-    range_header = request.META.get('HTTP_RANGE')
-    if not range_header or not range_header.strip().startswith('bytes='):
-        if full_file_if_no_range:
-            return send_full_file_response(file_path, content_type, filename)
-        range_header = f'bytes=0-{min(STREAM_CHUNK_SIZE, size) - 1}'
-    start, end = parse_byte_range(range_header, size, full_file_if_no_range)
+    """Serve file with HTTP 206 range support or full file (200)."""
+    if not os.path.exists(file_path):
+        raise Http404('File not found')
+    
+    file_size = os.path.getsize(file_path)
+    range_header = request.META.get('HTTP_RANGE', '')
+    start, end = get_byte_range_from_header(range_header, file_size, full_file_if_no_range)
     length = end - start + 1
+    
     with open(file_path, 'rb') as f:
         f.seek(start)
         data = f.read(length)
-    response = HttpResponse(data, status=206, content_type=content_type)
-    response['Content-Range'] = f'bytes {start}-{end}/{size}'
-    response['Content-Length'] = length
-    response['Accept-Ranges'] = 'bytes'
-    response['Content-Disposition'] = f'inline; filename="{filename}"'
-    return response
+    
+    range_info = f'bytes {start}-{end}/{file_size}'
+    return build_http_response(data, 206, content_type, filename, range_info)
 
 
 def get_published_video(movie_id):
@@ -259,28 +272,38 @@ def build_m3u8_path(original_path, resolution):
     return os.path.join(hls_dir, 'index.m3u8')
 
 
+def create_m3u8_response(content, filename='index.m3u8'):
+    """Create M3U8 HTTP response."""
+    response = HttpResponse(content, content_type='application/vnd.apple.mpegurl')
+    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    return response
+
+
+def read_m3u8_file(m3u8_path):
+    """Read M3U8 file. Return None if error."""
+    try:
+        with open(m3u8_path, 'r') as f:
+            return f.read()
+    except Exception as error:
+        logger.warning('Error reading M3U8: %s', error)
+        return None
+
+
+def build_fallback_m3u8():
+    """Build fallback M3U8 playlist pointing to original.mp4."""
+    return '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:9999\n#EXTINF:9999.0,\noriginal.mp4\n#EXT-X-ENDLIST\n'
+
+
 def serve_m3u8_or_fallback(m3u8_path, original_path):
-    """
-    Serve real M3U8 if it exists, else a fallback M3U8 pointing to original.mp4.
-    Returns None if neither file exists.
-    """
+    """Serve real M3U8 if exists, else fallback M3U8, else None."""
     if os.path.exists(m3u8_path):
-        try:
-            with open(m3u8_path, 'r') as f:
-                content = f.read()
-            response = HttpResponse(content, content_type='application/vnd.apple.mpegurl')
-            response['Content-Disposition'] = 'inline; filename="index.m3u8"'
-            return response
-        except Exception as e:
-            logger.warning('Error reading M3U8: %s', e)
+        content = read_m3u8_file(m3u8_path)
+        if content:
+            return create_m3u8_response(content)
+    
     if os.path.exists(original_path):
-        content = (
-            '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:9999\n'
-            '#EXTINF:9999.0,\noriginal.mp4\n#EXT-X-ENDLIST\n'
-        )
-        response = HttpResponse(content, content_type='application/vnd.apple.mpegurl')
-        response['Content-Disposition'] = 'inline; filename="index.m3u8"'
-        return response
+        return create_m3u8_response(build_fallback_m3u8())
+    
     return None
 
 

@@ -126,7 +126,7 @@ def _build_password_reset_link(uid, token):
 
 
 def _get_frontend_url():
-    """Get frontend base URL from settings"""
+    """Get frontend base URL from settings (e.g. http://127.0.0.1:5500)"""
     if hasattr(settings, 'FRONTEND_URL'):
         return settings.FRONTEND_URL
-    return "http://localhost:4200"
+    return "http://127.0.0.1:8000"

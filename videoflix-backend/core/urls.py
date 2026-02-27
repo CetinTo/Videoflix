@@ -9,6 +9,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 import debug_toolbar
 
+from api.frontend_views import serve_frontend_file, serve_frontend_index
+
 
 urlpatterns = [
     # Admin
@@ -29,6 +31,13 @@ if settings.DEBUG:
     urlpatterns += [
         path('__debug__/', include(debug_toolbar.urls)),
     ]
+
+# Frontend (HTML, CSS, JS, assets) – korrekte MIME-Types, kein Live-Server nötig
+# Nach static/media, damit /static/ und /media/ nicht abgefangen werden
+urlpatterns += [
+    path('', serve_frontend_index),
+    path('<path:path>', serve_frontend_file),
+]
 
 # Admin Site Customization
 admin.site.site_header = 'Videoflix Administration'

@@ -25,26 +25,32 @@ from .utils import (
 logger = logging.getLogger(__name__)
 
 
-def convert_video_to_quality(video_id, resolution='720p'):
-    """Convert video to specific quality"""
+def _ensure_video_and_input_path(video_id):
+    """Return (video, input_path) or (None, None) if video/input missing."""
     video = get_video_by_id(video_id)
     if not video:
-        return False
+        return None, None
     input_path = get_original_video_path(video)
     if not input_path:
         logger.error(f'Original video file not found for {video.title} (id={video_id})')
+        return None, None
+    return video, input_path
+
+
+def convert_video_to_quality(video_id, resolution='720p'):
+    """Convert video to specific quality"""
+    video, input_path = _ensure_video_and_input_path(video_id)
+    if not video:
         return False
     logger.info(f'Start conversion for {video.title} to {resolution}')
     output_path = get_output_path(input_path, f'{resolution}.mp4')
     quality_settings = get_quality_settings(resolution)
     command = build_ffmpeg_command(input_path, output_path, quality_settings)
     success, error = run_ffmpeg_command(command)
-    
     if success:
         _save_converted_video(video, resolution, output_path)
         logger.info(f'Video {resolution} saved for {video.title}')
         return True
-    
     logger.error(f'FFmpeg error: {error}')
     return False
 
@@ -57,35 +63,25 @@ def _save_converted_video(video, resolution, file_path):
 
 def generate_thumbnail(video_id, timestamp='00:00:05'):
     """Generate video thumbnail at specific timestamp"""
-    video = get_video_by_id(video_id)
+    video, input_path = _ensure_video_and_input_path(video_id)
     if not video:
-        return False
-    input_path = get_original_video_path(video)
-    if not input_path:
-        logger.error(f'Original video file not found for {video.title} (id={video_id})')
         return False
     logger.info(f'Generate thumbnail for {video.title}')
     thumbnail_path = get_output_path(input_path, 'thumbnail.jpg')
     command = build_thumbnail_command(input_path, thumbnail_path, timestamp)
     success, error = run_ffmpeg_command(command)
-    
     if success:
         save_thumbnail_file(video, thumbnail_path)
         logger.info(f'Thumbnail saved for {video.title}')
         return True
-    
     logger.error(f'FFmpeg error: {error}')
     return False
 
 
 def get_video_duration(video_id):
     """Get video duration using ffprobe"""
-    video = get_video_by_id(video_id)
+    video, input_path = _ensure_video_and_input_path(video_id)
     if not video:
-        return False
-    input_path = get_original_video_path(video)
-    if not input_path:
-        logger.error(f'Original video file not found for {video.title} (id={video_id})')
         return False
     logger.info(f'Get duration for {video.title} from {input_path}')
     duration_seconds = get_video_duration_seconds(input_path)
@@ -99,12 +95,8 @@ def get_video_duration(video_id):
 
 def convert_video_to_hls(video_id, resolution='720p'):
     """Convert video to HLS format with M3U8 playlist and TS segments"""
-    video = get_video_by_id(video_id)
+    video, input_path = _ensure_video_and_input_path(video_id)
     if not video:
-        return False
-    input_path = get_original_video_path(video)
-    if not input_path:
-        logger.error(f'Original video file not found for {video.title} (id={video_id})')
         return False
     logger.info(f'Start HLS conversion for {video.title} to {resolution}')
     output_dir = os.path.dirname(input_path)
@@ -112,11 +104,9 @@ def convert_video_to_hls(video_id, resolution='720p'):
     quality_settings = get_quality_settings(resolution)
     command = build_hls_ffmpeg_command(input_path, hls_dir, quality_settings)
     success, error = run_ffmpeg_command(command)
-    
     if success:
         _log_hls_success(hls_dir, resolution)
         return True
-    
     logger.error(f'FFmpeg HLS error: {error}')
     return False
 

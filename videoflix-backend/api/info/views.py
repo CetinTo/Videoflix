@@ -2,23 +2,19 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from .models import LegalPage
-from .serializers import LegalPageSerializer
+
+from info.models import LegalPage
+from api.info.serializers import LegalPageSerializer
 
 
 @extend_schema_view(
-    list=extend_schema(
-        description='Returns all published legal pages'
-    ),
-    retrieve=extend_schema(
-        description='Returns specific legal page by ID'
-    )
+    list=extend_schema(description='Returns all published legal pages'),
+    retrieve=extend_schema(description='Returns specific legal page by ID'),
 )
 class LegalPageViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for legal pages (Privacy Policy, Imprint, Terms)
-    
-    Read-only access to legal information pages
+    Read-only access to legal information pages.
     """
     serializer_class = LegalPageSerializer
     permission_classes = [permissions.AllowAny]
@@ -26,7 +22,7 @@ class LegalPageViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Returns only published legal pages"""
         return LegalPage.objects.filter(is_published=True)
-    
+
     def _get_page(self, page_type, lang):
         """Return published LegalPage for page_type and lang, or None."""
         lang = lang if lang in ('de', 'en') else 'de'

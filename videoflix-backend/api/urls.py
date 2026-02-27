@@ -29,7 +29,7 @@ from api.videos.views import (
     VideoHLSView,
     VideoSegmentView,
 )
-from info.views import LegalPageViewSet
+from api.info.views import LegalPageViewSet
 
 
 # DRF router for REST resources
@@ -58,12 +58,12 @@ urlpatterns = [
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
+    # HLS streaming (vor Router, damit video/1/480p/index.m3u8 nicht vom VideoViewSet abgefangen wird)
+    path('video/<int:movie_id>/<str:resolution>/index.m3u8', VideoHLSView.as_view(), name='video_hls'),
+    path('video/<int:movie_id>/<str:resolution>/<str:segment>', VideoSegmentView.as_view(), name='video_segment'),
+
     # REST resources
     path('', include(router.urls)),
-
-    # HLS streaming endpoints
-    path('video/<int:movie_id>/<str:resolution>/index.m3u8', VideoHLSView.as_view(), name='video_hls'),
-    path('video/<int:movie_id>/<str:resolution>/<str:segment>/', VideoSegmentView.as_view(), name='video_segment'),
 
     # API schema & docs
     path('schema/', SpectacularAPIView.as_view(), name='schema'),

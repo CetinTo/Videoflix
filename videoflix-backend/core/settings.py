@@ -21,10 +21,17 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
-CSRF_TRUSTED_ORIGINS = os.environ.get("CSRF_TRUSTED_ORIGINS", "http://localhost:4200").split(",")
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    "CSRF_TRUSTED_ORIGINS",
+    "http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://127.0.0.1:8000"
+).split(",")
 
-# Frontend URL (for email links)
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:4200")
+# Frontend URL (for email links: activation, password reset)
+# Static frontend runs on port 5500 (e.g. http.server or Live Server)
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://127.0.0.1:8000")
+
+# Frontend root for serving static files (Docker: /frontend, local: parent of backend)
+FRONTEND_ROOT = os.environ.get("FRONTEND_ROOT") or None
 
 
 # Application definition
@@ -209,7 +216,9 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only for development
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5500",
+    "http://localhost:5502",
     "http://127.0.0.1:5500",
+    "http://127.0.0.1:5502",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
