@@ -14,13 +14,14 @@
     <link rel="stylesheet" href="/styles.css">
     <link rel="icon" href="/assets/icons/logo_icon_small.svg" type="image/svg+xml">
 
-    <script src="/shared/js/variables.js" ></script>
+    <script src="/shared/js/variables.js"></script>
+    <script src="/shared/js/config.js"></script>
     <script src="/shared/js/ui_helper.js"></script>
     <script src="/shared/js/api.js"></script>
     <script src="/shared/js/header.js"></script>
 </head>
 
-<body onload="setHeader()" class="dark_bg">
+<body onload="setHeader(); loadLegalPage('imprint', 'imprint-content')" class="dark_bg">
 <header class="main_header w_full">
     <a aria-label="login page" href="/pages/auth/login.html">
         <img src="/assets/icons/logo_icon_small.svg" alt="" srcset="">
@@ -32,30 +33,29 @@
     </a>
 </header>
 <main class="w_full d_flex_ss_gl font_white_color">
-    <h1 class="font_prime_color">Imprint</h1>
-
-    <section class="d_flex_ss_gm f_d_c">
-        <h2>Legal Notice</h2>
-        <address>
-            <p><strong>Name:</strong> Max Mustermann</p>
-            <p><strong>Address:</strong> Sample Street 1, 12345 Sample City</p>
-            <p><strong>Phone:</strong> <a class="link_secondary" href="tel:+44123456789">+44 123 456 789</a></p>
-            <p><strong>Email:</strong> <a class="link_secondary" href="mailto:info@example.com">info@example.com</a></p>
-        </address>
-    </section>
-    <section class="d_flex_ss_gm f_d_c">
-        <h3>Disclaimer</h3>
-        <p>
-            Despite careful content control, we assume no liability for the content of external links.
-            The operators of the linked pages are solely responsible for their content.
-        </p>
-    </section>
+    <div id="imprint-content">Loading...</div>
 </main>
-<footer class="main_footer  w_full">
+<footer class="main_footer w_full">
     <nav class="d_flex_cs_gl w_full">
         <a aria-label="privacy policy page" href="../privacy/index.html" class="link">Privacy Policy</a>
     </nav>
 </footer>
+
+<script>
+async function loadLegalPage(pageType, containerId) {
+    const lang = navigator.language.startsWith('de') ? 'de' : 'en';
+    try {
+        const response = await fetch(`${API_BASE_URL}legal/${pageType}/?lang=${lang}`, {
+            credentials: 'include'
+        });
+        if (!response.ok) throw new Error('Failed to load');
+        const data = await response.json();
+        document.getElementById(containerId).innerHTML = data.content;
+    } catch (e) {
+        document.getElementById(containerId).innerHTML = '<p>Content could not be loaded.</p>';
+    }
+}
+</script>
 </body>
 
 </html>

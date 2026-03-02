@@ -3,7 +3,7 @@ Utility functions for user authentication and management
 """
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from django.core.mail import send_mail, EmailMultiAlternatives
+from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
@@ -112,14 +112,14 @@ def send_password_reset_email(user, uid, token):
 
 
 def _build_activation_link(uid, token):
-    """Build activation URL (Frontend erwartet: .../activate.html?uid=...&token=...)"""
+    """Build activation URL pointing to the frontend activation page."""
     from urllib.parse import quote
     base_url = _get_frontend_url().rstrip('/')
     return f"{base_url}/pages/auth/activate.html?uid={quote(uid)}&token={quote(token)}"
 
 
 def _build_password_reset_link(uid, token):
-    """Build password reset URL (Frontend expects: .../confirm_password.html?uid=...&token=...)"""
+    """Build password reset URL pointing to the frontend confirm password page."""
     from urllib.parse import quote
     base_url = _get_frontend_url().rstrip('/')
     return f"{base_url}/pages/auth/confirm_password.html?uid={quote(uid)}&token={quote(token)}"

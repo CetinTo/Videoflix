@@ -15,36 +15,47 @@
     <link rel="icon" href="/assets/icons/logo_icon_small.svg" type="image/svg+xml">
 
     <script src="/shared/js/variables.js"></script>
+    <script src="/shared/js/config.js"></script>
     <script src="/shared/js/ui_helper.js"></script>
     <script src="/shared/js/api.js"></script>
     <script src="/shared/js/header.js"></script>
 </head>
 
-<body onload="setHeader()" class="dark_bg">
+<body onload="setHeader(); loadLegalPage('privacy', 'privacy-content')" class="dark_bg">
 <header class="main_header w_full">
-        <a aria-label="login page" href="/pages/auth/login.html">
-            <img src="/assets/icons/logo_icon_small.svg" alt="" srcset="">
-            <img src="/assets/icons/logo_icon.svg" alt="" srcset="">
-        </a>
+    <a aria-label="login page" href="/pages/auth/login.html">
+        <img src="/assets/icons/logo_icon_small.svg" alt="" srcset="">
+        <img src="/assets/icons/logo_icon.svg" alt="" srcset="">
+    </a>
     <a onclick="goBackURL()">
         <img src="../../assets/icons/arrow_back.svg" alt="arrow for going back">
         <img src="../../assets/icons/arrow_back.svg" alt="arrow for going back">
     </a>
 </header>
 <main class="w_full d_flex_ss_gl font_white_color">
-    <h1 class="font_prime_color">Privacy Policy</h1>
-    <section class="d_flex_ss_gm f_d_c">
-        <h2>Subtitle</h2>
-        <p>
-            Lorem ipsum dolor sit amet consectetur adipisicing elit. Iste ea placeat illo omnis, atque temporibus
-            nostrum quia! Impedit, aliquid. Placeat impedit neque quod quasi eos fuga ipsa fugit odit voluptatem?
-        </p>
-    </section>
+    <div id="privacy-content">Loading...</div>
 </main>
-<footer class="main_footer  w_full">
+<footer class="main_footer w_full">
     <nav class="d_flex_cs_gl w_full">
         <a aria-label="imprint page" href="../imprint/index.html" class="link">Imprint</a>
     </nav>
 </footer>
+
+<script>
+async function loadLegalPage(pageType, containerId) {
+    const lang = navigator.language.startsWith('de') ? 'de' : 'en';
+    try {
+        const response = await fetch(`${API_BASE_URL}legal/${pageType}/?lang=${lang}`, {
+            credentials: 'include'
+        });
+        if (!response.ok) throw new Error('Failed to load');
+        const data = await response.json();
+        document.getElementById(containerId).innerHTML = data.content;
+    } catch (e) {
+        document.getElementById(containerId).innerHTML = '<p>Content could not be loaded.</p>';
+    }
+}
+</script>
 </body>
+
 </html>

@@ -1,4 +1,5 @@
-from django.db.models import Avg, Prefetch
+import logging
+from django.db.models import Prefetch
 from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -7,14 +8,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-import logging
 from videos.models import Category, Video, VideoComment, VideoRating
-
-logger = logging.getLogger(__name__)
-from api.videos.serializers import (
+from videos.api.serializers import (
     CategorySerializer,
     VideoListSerializer,
-    VideoListDetailedSerializer,
     VideoDetailSerializer,
     VideoCreateSerializer,
     VideoCommentSerializer,
@@ -32,11 +29,7 @@ from videos.utils import (
     serve_ts_segment,
 )
 
-
-def validate_video_and_resolution(video, resolution):
-    """Validate video exists and resolution is valid."""
-    invalid_response = validate_hls_resolution(resolution)
-    return invalid_response if invalid_response else (video, None)
+logger = logging.getLogger(__name__)
 
 
 def get_video_stream_response(movie_id, resolution):
@@ -60,23 +53,7 @@ class VideoHLSView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, movie_id, resolution):
-        """Return HLS M3U8 playlist."""
         return get_video_stream_response(movie_id, resolution)
-
-
-def get_segment_response(movie_id, resolution, segment):
-    """Get HLS segment response (original.mp4 or .ts file)."""
-    video = get_published_video(movie_id)
-    invalid_response = validate_hls_resolution(resolution)
-    if invalid_response:
-        return invalid_response
-    
-    validate_segment_name(segment)
-    original_path = get_original_video_path(video)
-    if not original_path:
-        raise Http404('Video file not found')
-    
-    return serve_original_mp4 if segment == 'original.mp4' else serve_ts_segment
 
 
 class VideoSegmentView(APIView):
@@ -84,26 +61,21 @@ class VideoSegmentView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, movie_id, resolution, segment):
-        """Return HLS segment (original.mp4 or .ts file)."""
         video = get_published_video(movie_id)
         invalid_response = validate_hls_resolution(resolution)
         if invalid_response:
             return invalid_response
-        
         validate_segment_name(segment)
         original_path = get_original_video_path(video)
         if not original_path:
             raise Http404('Video file not found')
-        
         if segment == 'original.mp4':
             return serve_original_mp4(request, original_path)
         return serve_ts_segment(original_path, resolution, segment)
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Read-only ViewSet for video categories.
-    """
+    """Read-only ViewSet for video categories."""
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [permissions.AllowAny]
@@ -116,9 +88,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     create=extend_schema(description='Upload a new video (authenticated users only)'),
 )
 class VideoViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for videos. GET /api/video/ returns the list of published videos.
-    """
+    """ViewSet for videos."""
     queryset = Video.objects.filter(status='published')
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['categories__slug', 'quality', 'age_rating', 'release_year']
@@ -126,94 +96,72 @@ class VideoViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'view_count', 'rating', 'title']
     ordering = ['-created_at']
     lookup_field = 'slug'
-    permission_classes = [permissions.AllowAny]  # Liste und Abspielen ohne Login
-    pagination_class = None  # Frontend erwartet Array, keine Paginierung
-    
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
     def get_serializer_class(self):
         if self.action == 'list':
             return VideoListSerializer
-        elif self.action == 'create':
+        if self.action == 'create':
             return VideoCreateSerializer
-        elif self.action == 'stream':
+        if self.action == 'stream':
             return VideoStreamSerializer
         return VideoDetailSerializer
-    
+
     def get_serializer_context(self):
-        """Fügt request zum Serializer-Context hinzu für absolute URLs"""
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
-    
+
     def list(self, request, *args, **kwargs):
-        """Return list of videos as JSON array."""
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-    
+
     def retrieve(self, request, *args, **kwargs):
-        """Increment view count when retrieving a video."""
         instance = self.get_object()
         instance.increment_view_count()
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
-    
+
     def perform_create(self, serializer):
-        """Setzt den Uploader automatisch"""
         serializer.save(uploaded_by=self.request.user)
-    
-    @extend_schema(
-        description='Return featured videos for the hero section'
-    )
+
+    @extend_schema(description='Return featured videos for the hero section')
     @action(detail=False, methods=['get'])
     def featured(self, request):
-        """Returns featured videos for hero section"""
         featured_videos = self.get_queryset().filter(is_featured=True)[:10]
         serializer = VideoListSerializer(featured_videos, many=True, context={'request': request})
         return Response(serializer.data)
-    
-    @extend_schema(
-        description='Return a random featured video for the hero section'
-    )
+
+    @extend_schema(description='Return a random featured video for the hero section')
     @action(detail=False, methods=['get'])
     def hero(self, request):
-        """Returns random featured video for hero section"""
         hero_video = self.get_queryset().filter(is_featured=True).order_by('?').first()
         if not hero_video:
             hero_video = self.get_queryset().order_by('-view_count').first()
-        
         if hero_video:
-            serializer = VideoDetailSerializer(hero_video, context={'request': request})
-            return Response(serializer.data)
-        
+            return Response(VideoDetailSerializer(hero_video, context={'request': request}).data)
         return Response({'detail': 'No videos available'}, status=status.HTTP_404_NOT_FOUND)
-    
-    @extend_schema(
-        description='Gibt die beliebtesten Videos (nach Views) zurück'
-    )
+
+    @extend_schema(description='Return trending videos by view count')
     @action(detail=False, methods=['get'])
     def trending(self, request):
-        """Return trending videos by view count."""
         trending_videos = self.get_queryset().order_by('-view_count')[:20]
-        serializer = VideoListSerializer(trending_videos, many=True)
-        return Response(serializer.data)
-    
-    @extend_schema(
-        description='Return HLS stream URLs for all available qualities'
-    )
+        return Response(VideoListSerializer(trending_videos, many=True).data)
+
+    @extend_schema(description='Return HLS stream URLs for all available qualities')
     @action(detail=True, methods=['get'])
     def stream(self, request, slug=None):
-        """Return HLS stream URLs for the video."""
         video = self.get_object()
-        serializer = VideoStreamSerializer(video)
-        return Response(serializer.data)
-    
+        return Response(VideoStreamSerializer(video).data)
+
     @action(detail=False, methods=['get'])
     def by_category(self, request):
         """Return videos grouped by categories for dashboard."""
         categories = Category.objects.prefetch_related(
             Prefetch('videos', queryset=self.get_queryset().order_by('-created_at')[:20])
         )
-        
         result = []
         for category in categories:
             if category.videos.exists():
@@ -221,12 +169,11 @@ class VideoViewSet(viewsets.ModelViewSet):
                     'category': CategorySerializer(category).data,
                     'videos': VideoListSerializer(category.videos.all(), many=True, context={'request': request}).data
                 })
-        
         return Response(result)
 
 
 class VideoCommentViewSet(viewsets.ModelViewSet):
-    """ViewSet für Video-Kommentare (CRUD)."""
+    """ViewSet für Video-Kommentare."""
     serializer_class = VideoCommentSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
@@ -238,7 +185,7 @@ class VideoCommentViewSet(viewsets.ModelViewSet):
 
 
 class VideoRatingViewSet(viewsets.ModelViewSet):
-    """ViewSet für Video-Bewertungen (CRUD)."""
+    """ViewSet für Video-Bewertungen."""
     serializer_class = VideoRatingSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
@@ -247,4 +194,3 @@ class VideoRatingViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
-

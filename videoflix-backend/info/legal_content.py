@@ -1,10 +1,10 @@
 """
 Legal page content templates (Imprint, Privacy, Terms) for populate_legal_pages.
-Operator: Cetin Toker, cetin.toker@web.de, Martin-Jäder-Weg 22, 87480 Weitnau
+Operator: Cetin Toker, cetintoker@web.de, Martin-Jäger-Weg 22, 87480 Weitnau
 """
 NAME = "Cetin Toker"
-EMAIL = "cetin.toker@web.de"
-STREET = "Martin-Jäder-Weg 22"
+EMAIL = "cetintoker@web.de"
+STREET = "Martin-Jäger-Weg 22"
 ZIP_CODE = "87480"
 CITY = "Weitnau"
 COUNTRY_DE = "Deutschland"

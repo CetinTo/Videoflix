@@ -11,10 +11,8 @@ from .utils import (
     get_original_video_path,
     get_output_path,
     get_quality_settings,
-    build_ffmpeg_command,
     build_hls_ffmpeg_command,
     run_ffmpeg_command,
-    save_video_file,
     get_video_duration_seconds,
     create_hls_directory,
     build_thumbnail_command,
@@ -35,30 +33,6 @@ def _ensure_video_and_input_path(video_id):
         logger.error(f'Original video file not found for {video.title} (id={video_id})')
         return None, None
     return video, input_path
-
-
-def convert_video_to_quality(video_id, resolution='720p'):
-    """Convert video to specific quality"""
-    video, input_path = _ensure_video_and_input_path(video_id)
-    if not video:
-        return False
-    logger.info(f'Start conversion for {video.title} to {resolution}')
-    output_path = get_output_path(input_path, f'{resolution}.mp4')
-    quality_settings = get_quality_settings(resolution)
-    command = build_ffmpeg_command(input_path, output_path, quality_settings)
-    success, error = run_ffmpeg_command(command)
-    if success:
-        _save_converted_video(video, resolution, output_path)
-        logger.info(f'Video {resolution} saved for {video.title}')
-        return True
-    logger.error(f'FFmpeg error: {error}')
-    return False
-
-
-def _save_converted_video(video, resolution, file_path):
-    """Save converted video to model field"""
-    field_name = f'video_{resolution}'
-    save_video_file(video, field_name, file_path)
 
 
 def generate_thumbnail(video_id, timestamp='00:00:05'):

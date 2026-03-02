@@ -48,4 +48,4 @@ class LegalPage(models.Model):
         unique_together = [('page_type', 'language')]
     
     def __str__(self):
-        return f"{self.get_page_type_display()}"
+        return f"{self.get_page_type_display()} ({self.language})"

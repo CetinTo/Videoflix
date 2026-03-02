@@ -6,6 +6,4 @@ class UsersConfig(AppConfig):
     name = 'users'
     verbose_name = 'Users'
     
-    def ready(self):
-        """Registriert Signals beim Start"""
-        import core.signals
+    pass

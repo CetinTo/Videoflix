@@ -1,45 +1,42 @@
 """
 URL Configuration for Videoflix project.
-
-Non-API URLs bleiben hier, alle API-spezifischen Routen liegen in ``api.urls``.
 """
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-import debug_toolbar
 
-from api.frontend_views import serve_frontend_file, serve_frontend_index
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 
 urlpatterns = [
-    # Admin
     path('admin/', admin.site.urls),
 
-    # Zentrale API-Routen (auth, videos, legal, docs, etc.)
-    path('api/', include('api.urls')),
+    # Auth & User endpoints
+    path('api/', include('users.api.urls')),
+
+    # Video endpoints
+    path('api/', include('videos.api.urls')),
+
+    # Legal endpoints
+    path('api/', include('info.urls')),
+
+    # API Schema & Docs
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 
     # Django RQ (Task Queue Dashboard)
     path('django-rq/', include('django_rq.urls')),
 ]
 
-# Static und Media Files in Development
 if settings.DEBUG:
+    import debug_toolbar
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-    # Django Debug Toolbar
     urlpatterns += [
         path('__debug__/', include(debug_toolbar.urls)),
     ]
 
-# Frontend (HTML, CSS, JS, assets) – korrekte MIME-Types, kein Live-Server nötig
-# Nach static/media, damit /static/ und /media/ nicht abgefangen werden
-urlpatterns += [
-    path('', serve_frontend_index),
-    path('<path:path>', serve_frontend_file),
-]
-
-# Admin Site Customization
 admin.site.site_header = 'Videoflix Administration'
 admin.site.site_title = 'Videoflix Admin'
 admin.site.index_title = 'Willkommen im Videoflix Admin Portal'
