@@ -19,7 +19,7 @@ urlpatterns = [
     path('api/', include('videos.api.urls')),
 
     # Legal endpoints
-    path('api/', include('info.urls')),
+    path('api/', include('info.api.urls')),
 
     # API Schema & Docs
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

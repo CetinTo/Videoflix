@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from info.views import LegalPageViewSet
+from info.api.views import LegalPageViewSet
 
 router = DefaultRouter()
 router.register(r'legal', LegalPageViewSet, basename='legal')
