@@ -66,6 +66,7 @@ docker-compose up --build -d
 
 **4. Run migrations and populate legal pages**
 ```bash
+docker exec videoflix_backend python manage.py makemigrations
 docker exec videoflix_backend python manage.py migrate
 docker exec videoflix_backend python manage.py populate_legal_pages
 ```
@@ -93,6 +94,7 @@ pip install -r requirements.txt
 cp .env.template .env
 # Set DB_HOST=localhost, REDIS_HOST=localhost in .env
 
+python manage.py makemigrations
 python manage.py migrate
 python manage.py populate_legal_pages
 python manage.py rqworker default &   # Background worker
@@ -188,10 +190,11 @@ videoflix-backend/
 │
 ├── info/                        # Legal pages app
 │   ├── models.py                # LegalPage model
-│   ├── views.py                 # LegalPageViewSet
-│   ├── serializers.py           # LegalPageSerializer
-│   ├── urls.py                  # Legal URL patterns
 │   ├── legal_content.py         # HTML content for DE/EN legal pages
+│   ├── api/
+│   │   ├── views.py             # LegalPageViewSet
+│   │   ├── serializers.py       # LegalPageSerializer
+│   │   └── urls.py              # Legal URL patterns
 │   └── management/commands/
 │       └── populate_legal_pages.py
 │
