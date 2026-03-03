@@ -64,10 +64,11 @@ cp .env.template .env
 docker-compose up --build -d
 ```
 
-**4. Run migrations and populate legal pages**
+**4. Populate legal pages**
+
+> Migrations are created and applied automatically on container start.
+
 ```bash
-docker exec videoflix_backend python manage.py makemigrations
-docker exec videoflix_backend python manage.py migrate
 docker exec videoflix_backend python manage.py populate_legal_pages
 ```
 
