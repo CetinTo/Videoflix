@@ -1,0 +1,91 @@
+services:
+  - type: web
+    name: videoflix-backend
+    runtime: docker
+    dockerfilePath: ./videoflix-backend/backend.Dockerfile
+    dockerContext: ./videoflix-backend
+    plan: free
+    envVars:
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://videoflix-backend.onrender.com
+      - key: FRONTEND_URL
+        value: https://videoflix-backend.onrender.com
+      - key: DB_NAME
+        fromDatabase:
+          name: videoflix-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: videoflix-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: videoflix-db
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: videoflix-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: videoflix-db
+          property: port
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: videoflix-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: videoflix-redis
+          property: port
+      - key: REDIS_PASSWORD
+        fromService:
+          type: redis
+          name: videoflix-redis
+          property: password
+      - key: REDIS_LOCATION
+        fromService:
+          type: redis
+          name: videoflix-redis
+          property: connectionString
+      - key: REDIS_DB
+        value: "0"
+      - key: DJANGO_SUPERUSER_USERNAME
+        value: admin
+      - key: DJANGO_SUPERUSER_EMAIL
+        value: admin@videoflix.com
+      - key: DJANGO_SUPERUSER_PASSWORD
+        generateValue: true
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_USE_SSL
+        value: "False"
+      - key: EMAIL_HOST_USER
+        value: cetintoker2510@gmail.com
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        value: cetintoker2510@gmail.com
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+  - type: redis
+    name: videoflix-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
+databases:
+  - name: videoflix-db
+    plan: free
